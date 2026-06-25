@@ -529,8 +529,14 @@ class PatternPlanEngine:
         return plan
 
     def _clamp_border_thickness(self, plan: PatternPlan, user_input: str = "") -> None:
-        """根据当前编辑指令推断允许的最大边框厚度，并钳制所有 border motif 的 thickness。
-
+        """根据当前编辑指令推断允许的最大边框厚度，并钗制所有 border motif 的 thickness。
+    
+        优先级策略：
+        - 用户明确说"很粗/非常粗"：max_t = 4
+        - 用户明确说"加粗"（非轻微）：max_t = 3
+        - 用户说"轻微加粗/稍微加粗"：max_t = 2
+        - 用户未提及任何粗度关键词：max_t = 2（初始创建默认值）
+    
         优先使用传入的 user_input（当前指令），若为空则回退到最后一条 history。
         """
         if user_input:
@@ -539,16 +545,29 @@ class PatternPlanEngine:
             latest_text = plan.history[-1].get("input", "")
         else:
             latest_text = ""
-
-        # 区分"强加粗"和"轻微加粗"：
-        # - 强加粗关键词（允许上限 4）：用户明确说"加粗/很粗/非常粗"
-        # - 轻微关键词（上限仍为 3）："轻微/稍微/一点" + "加粗" 组合
+    
+        # 检测粗度关键词
         is_mild = any(k in latest_text for k in ["轻微", "稍微", "一点", "少量", "稍稍", "略"])
-        is_strong = (
-            any(k in latest_text for k in ["加粗", "很粗", "非常粗", "粗边框", "粗框"])
-            and not is_mild
-        )
-        max_t = 4 if is_strong else 3
+        has_thicken_kw = any(k in latest_text for k in ["加粗", "很粗", "非常粗", "粗边框", "粗框"])
+        is_strong = has_thicken_kw and not is_mild
+    
+        # 分层阈值：
+        # - 很粗/非常粗（强加粗）：max 4
+        # - 加粗（非轻微）：max 3
+        # - 轻微加粗：max 2
+        # - 未提及粗度：max 2（默认创建）
+        if is_strong:
+            # 检查是否为"非常粗/很粗"级别
+            if any(k in latest_text for k in ["很粗", "非常粗"]):
+                max_t = 4
+            else:
+                max_t = 3
+        elif has_thicken_kw and is_mild:
+            # 轻微加粗
+            max_t = 2
+        else:
+            # 未提及粗度关键词，使用默认细边框
+            max_t = 2
 
         for motif in plan.motifs:
             if motif.role != "border":
