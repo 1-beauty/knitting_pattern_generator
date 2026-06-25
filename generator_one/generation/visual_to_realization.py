@@ -772,7 +772,7 @@ class VisualToRealizationConverter:
                     params.get("thickness", placement.get("border_thickness", border_thickness)),
                 )
             )
-            border_thickness = max(1, min(6, border_thickness))
+            border_thickness = max(1, min(3, border_thickness))
         except Exception:
             border_thickness = 1
         

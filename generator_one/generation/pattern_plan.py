@@ -178,11 +178,20 @@ class PatternPlanEngine:
         if data:
             plan = self._data_to_plan(data, current_plan=current_plan)
             if plan is not None:
-                if current_plan is not None and self._looks_like_edit(user_input):
+                # 当 LLM 输出全量 motifs 时，说明 LLM 已经理解了编辑意图并
+                # 直接给出了调整后的值，不应再叠加启发式调整（否则 border
+                # thickness 会被二次 +1）。只有当 LLM 输出 operation 格式
+                # （增量修改）时才运行 _apply_structured_edit。
+                is_full_plan = "motifs" in data or "regions" in data
+                if (
+                    current_plan is not None
+                    and self._looks_like_edit(user_input)
+                    and not is_full_plan
+                ):
                     self._apply_structured_edit(plan, user_input)
                 self._repair_plan_from_text(plan, user_input)
                 plan.history.append({"input": user_input, "source": "llm"})
-                return self.validate(plan)
+                return self.validate(plan, user_input=user_input)
 
         logger.warning("PatternPlan parse failed; using heuristic planner")
         return self.from_prompt(user_input, current_plan=current_plan)
@@ -193,18 +202,18 @@ class PatternPlanEngine:
             plan = copy.deepcopy(current_plan)
             self._apply_heuristic_edit(plan, user_input)
             plan.history.append({"input": user_input, "source": "heuristic_edit"})
-            return self.validate(plan)
+            return self.validate(plan, user_input=user_input)
 
         if any(k in user_input for k in ["随机", "随便", "生成一些", "灵感"]) or "random" in text:
             plan = self.random_plan()
             plan.history.append({"input": user_input, "source": "random"})
-            return self.validate(plan)
+            return self.validate(plan, user_input=user_input)
 
         motifs = self._motifs_from_text(user_input)
         plan = PatternPlan(layout_type=self._infer_layout(user_input), motifs=motifs)
         self._repair_plan_from_text(plan, user_input)
         plan.history.append({"input": user_input, "source": "heuristic_new"})
-        return self.validate(plan)
+        return self.validate(plan, user_input=user_input)
 
     def random_plan(self, seed: Optional[int] = None) -> PatternPlan:
         rng = random.Random(seed) if seed is not None else random.SystemRandom()
@@ -432,7 +441,7 @@ class PatternPlanEngine:
 
         return VisualSpec(layout_type=plan.layout_type, regions=regions, raw_json=plan.to_dict())
 
-    def validate(self, plan: PatternPlan) -> PatternPlan:
+    def validate(self, plan: PatternPlan, user_input: str = "") -> PatternPlan:
         if not plan.motifs:
             plan.motifs = self._motifs_from_text("中心菱形")
         seen = set()
@@ -454,17 +463,31 @@ class PatternPlanEngine:
             self._repair_complex_layer_links(plan)
         self._infer_missing_parent_links(plan)
         # 无论编辑来源（LLM/启发式），统一钳制边框厚度
-        self._clamp_border_thickness(plan)
+        self._clamp_border_thickness(plan, user_input=user_input)
         return plan
 
-    def _clamp_border_thickness(self, plan: PatternPlan) -> None:
-        """根据历史指令推断允许的最大边框厚度，并钳制所有 border motif 的 thickness。"""
-        history_text = " ".join(h.get("input", "") for h in plan.history)
-        # 用户明确要求"加粗/很粗"时允许到 4，否则上限 3
-        if any(k in history_text for k in ["加粗", "很粗", "非常粗", "粗边框", "粗框"]):
-            max_t = 4
+    def _clamp_border_thickness(self, plan: PatternPlan, user_input: str = "") -> None:
+        """根据当前编辑指令推断允许的最大边框厚度，并钳制所有 border motif 的 thickness。
+
+        优先使用传入的 user_input（当前指令），若为空则回退到最后一条 history。
+        """
+        if user_input:
+            latest_text = user_input
+        elif plan.history:
+            latest_text = plan.history[-1].get("input", "")
         else:
-            max_t = 3
+            latest_text = ""
+
+        # 区分"强加粗"和"轻微加粗"：
+        # - 强加粗关键词（允许上限 4）：用户明确说"加粗/很粗/非常粗"
+        # - 轻微关键词（上限仍为 3）："轻微/稍微/一点" + "加粗" 组合
+        is_mild = any(k in latest_text for k in ["轻微", "稍微", "一点", "少量", "稍稍", "略"])
+        is_strong = (
+            any(k in latest_text for k in ["加粗", "很粗", "非常粗", "粗边框", "粗框"])
+            and not is_mild
+        )
+        max_t = 4 if is_strong else 3
+
         for motif in plan.motifs:
             if motif.role != "border":
                 continue
