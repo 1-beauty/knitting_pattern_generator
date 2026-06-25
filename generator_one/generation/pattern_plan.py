@@ -205,7 +205,8 @@ class PatternPlanEngine:
             return self.validate(plan, user_input=user_input)
 
         if any(k in user_input for k in ["随机", "随便", "生成一些", "灵感"]) or "random" in text:
-            plan = self.random_plan()
+            hints = self._parse_prompt_hints(user_input)
+            plan = self.random_plan(prompt_hints=hints)
             plan.history.append({"input": user_input, "source": "random"})
             return self.validate(plan, user_input=user_input)
 
@@ -215,15 +216,58 @@ class PatternPlanEngine:
         plan.history.append({"input": user_input, "source": "heuristic_new"})
         return self.validate(plan, user_input=user_input)
 
-    def random_plan(self, seed: Optional[int] = None) -> PatternPlan:
+    @staticmethod
+    def _parse_prompt_hints(user_input: str) -> Dict[str, bool]:
+        """从用户 prompt 中解析结构偏好关键词，用于偏置随机生成。"""
+        text = user_input
+        hints: Dict[str, bool] = {}
+        if any(k in text for k in ["几何", "主体", "轮廓", "形状"]):
+            hints["need_geometry"] = True
+        if any(k in text for k in ["边框", "外框", "框"]):
+            hints["need_border"] = True
+        if any(k in text for k in ["纹理", "吊目", "网眼", "蜂巢", "麻花", "浮雕"]):
+            hints["need_texture"] = True
+        if any(k in text for k in ["侧边", "边带", "两侧", "左右"]):
+            hints["need_side_bands"] = True
+        if any(k in text for k in ["稀疏", "稀疏"]):
+            hints["sparse"] = True
+        if any(k in text for k in ["密集", "密实", "密"]):
+            hints["dense"] = True
+        return hints
+
+    def random_plan(self, seed: Optional[int] = None, prompt_hints: Optional[Dict[str, bool]] = None) -> PatternPlan:
+        """Generate a random pattern plan.
+
+        Args:
+            seed: Optional random seed for reproducibility.
+            prompt_hints: Optional dict parsed from user prompt with keys:
+                - need_geometry: user mentioned 几何主体/几何形状/几何/主体
+                - need_border: user mentioned 边框/外框
+                - need_texture: user mentioned 纹理/吊目/网眼/蜂巢
+                - need_side_bands: user mentioned 侧边/边带/两侧
+                - sparse: user mentioned 稀疏/稀疏
+                - dense: user mentioned 密集/密
+        """
         rng = random.Random(seed) if seed is not None else random.SystemRandom()
-        layout = rng.choice([
-            "centered", "centered",
-            "framed", "framed",
-            "allover_repeat", "allover_repeat",
-            "side_bands",
-            "side_bands",
-        ])
+        hints = prompt_hints or {}
+
+        # ── 根据 prompt 关键词偏置布局选择 ──
+        if hints.get("need_geometry"):
+            # 用户要求几何主体，强制 centered/framed（不允许 allover 覆盖）
+            layout = rng.choice(["centered", "centered", "framed", "framed", "side_bands"])
+        elif hints.get("need_border"):
+            # 用户要求边框，强制 framed
+            layout = rng.choice(["framed", "framed", "framed", "centered"])
+        elif hints.get("need_side_bands"):
+            layout = rng.choice(["side_bands", "side_bands", "side_bands", "centered", "framed"])
+        else:
+            layout = rng.choice([
+                "centered", "centered",
+                "framed", "framed",
+                "allover_repeat", "allover_repeat",
+                "side_bands",
+                "side_bands",
+            ])
 
         # ── 大幅扩充候选池，避免默认偏好 ──
         center_pool = [
@@ -316,18 +360,36 @@ class PatternPlanEngine:
             ("panel", "reverse"),
         ]
 
-        motif_type, effect = rng.choice(center_pool)
+        # ── 根据 prompt 偏置候选池 ──
+        if hints.get("need_geometry"):
+            # 用户要求几何主体，只保留几何形状（排除 panel/stripe/column/wave）
+            _geo_shapes = {"circle", "diamond", "hexagon", "triangle", "polygon",
+                           "heart", "star", "chevron", "zigzag", "cross"}
+            geo_pool = [(s, e) for s, e in center_pool if s in _geo_shapes]
+            motif_type, effect = rng.choice(geo_pool)
+        else:
+            motif_type, effect = rng.choice(center_pool)
+
         size = rng.choice([8, 10, 12, 14, 16, 18, 20])
         # 中心位置加入轻微随机偏移，避免所有图案都严格居中
         center_r = rng.choice([18, 19, 20, 20, 20, 21, 22])
         center_c = rng.choice([18, 19, 20, 20, 20, 21, 22])
+        # 稀疏/密集偏好影响参数
+        base_params = self._default_params(effect, user_input="random")
+        if hints.get("sparse"):
+            base_params["period_x"] = rng.choice([6, 7, 8, 10])
+            base_params["period_y"] = rng.choice([5, 6, 7, 8])
+        elif hints.get("dense"):
+            base_params["period_x"] = rng.choice([2, 3, 3])
+            base_params["period_y"] = rng.choice([2, 2, 3])
+
         motifs = [
             PatternMotif(
                 motif_id="main",
                 motif_type=motif_type,
                 effect=effect,
                 region={"center": [center_r, center_c], "size": size},
-                params=self._default_params(effect, user_input="random"),
+                params=base_params,
                 role="allover" if motif_type in {"stripe", "column"} else "center",
                 symmetry=rng.choice(["none", "none", "mirror_lr", "mirror_ud"]),
             )
