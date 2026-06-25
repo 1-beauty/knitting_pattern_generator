@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="520" viewBox="0 0 1180 520">
+  <style>
+    .title { font-family: Arial, sans-serif; font-size: 24px; font-weight: 700; fill: #111827; }
+    .axis { stroke: #64748b; stroke-width: 1; }
+    .grid { stroke: #e5e7eb; stroke-width: 1; }
+    .label { font-family: Arial, sans-serif; font-size: 14px; fill: #374151; }
+    .small { font-family: Arial, sans-serif; font-size: 12px; fill: #4b5563; }
+    .legend { font-family: Arial, sans-serif; font-size: 13px; fill: #111827; }
+  </style>
+  <rect width="1180" height="520" fill="#ffffff"/>
+  <text x="42" y="42" class="title">Ablation Metrics under Constraint Stress Test</text>
+  <text x="42" y="68" class="small">Higher texture events and tension score indicate denser local actions and greater local transition risk.</text>
+
+  <g transform="translate(60,105)">
+    <text x="0" y="-18" class="legend">Texture events</text>
+    <line x1="0" y1="280" x2="460" y2="280" class="axis"/>
+    <line x1="0" y1="0" x2="0" y2="280" class="axis"/>
+    <line x1="0" y1="211" x2="460" y2="211" class="grid"/>
+    <line x1="0" y1="141" x2="460" y2="141" class="grid"/>
+    <line x1="0" y1="70" x2="460" y2="70" class="grid"/>
+    <text x="-28" y="285" class="small">0</text>
+    <text x="-36" y="215" class="small">15</text>
+    <text x="-36" y="145" class="small">30</text>
+    <text x="-36" y="74" class="small">45</text>
+    <text x="-36" y="5" class="small">60</text>
+    <rect x="35" y="205" width="58" height="75" fill="#2563eb"/>
+    <rect x="145" y="28" width="58" height="252" fill="#ef4444"/>
+    <rect x="255" y="149" width="58" height="131" fill="#10b981"/>
+    <rect x="365" y="112" width="58" height="168" fill="#f59e0b"/>
+    <text x="64" y="199" text-anchor="middle" class="small">16</text>
+    <text x="174" y="22" text-anchor="middle" class="small">54</text>
+    <text x="284" y="143" text-anchor="middle" class="small">28</text>
+    <text x="394" y="106" text-anchor="middle" class="small">36</text>
+    <text x="64" y="304" text-anchor="middle" class="small">Full</text>
+    <text x="174" y="304" text-anchor="middle" class="small">No repair</text>
+    <text x="284" y="304" text-anchor="middle" class="small">No refine</text>
+    <text x="394" y="304" text-anchor="middle" class="small">No aesthetic</text>
+  </g>
+
+  <g transform="translate(650,105)">
+    <text x="0" y="-18" class="legend">Tension score</text>
+    <line x1="0" y1="280" x2="460" y2="280" class="axis"/>
+    <line x1="0" y1="0" x2="0" y2="280" class="axis"/>
+    <line x1="0" y1="213" x2="460" y2="213" class="grid"/>
+    <line x1="0" y1="146" x2="460" y2="146" class="grid"/>
+    <line x1="0" y1="79" x2="460" y2="79" class="grid"/>
+    <text x="-36" y="285" class="small">0</text>
+    <text x="-46" y="217" class="small">0.03</text>
+    <text x="-46" y="150" class="small">0.06</text>
+    <text x="-46" y="83" class="small">0.09</text>
+    <text x="-46" y="5" class="small">0.12</text>
+    <polyline points="64,208 174,38 284,163 394,128" fill="none" stroke="#7c3aed" stroke-width="4"/>
+    <circle cx="64" cy="208" r="6" fill="#2563eb"/>
+    <circle cx="174" cy="38" r="6" fill="#ef4444"/>
+    <circle cx="284" cy="163" r="6" fill="#10b981"/>
+    <circle cx="394" cy="128" r="6" fill="#f59e0b"/>
+    <text x="64" y="196" text-anchor="middle" class="small">0.031</text>
+    <text x="174" y="26" text-anchor="middle" class="small">0.104</text>
+    <text x="284" y="151" text-anchor="middle" class="small">0.050</text>
+    <text x="394" y="116" text-anchor="middle" class="small">0.065</text>
+    <text x="64" y="304" text-anchor="middle" class="small">Full</text>
+    <text x="174" y="304" text-anchor="middle" class="small">No repair</text>
+    <text x="284" y="304" text-anchor="middle" class="small">No refine</text>
+    <text x="394" y="304" text-anchor="middle" class="small">No aesthetic</text>
+  </g>
+
+  <g transform="translate(60,455)">
+    <rect x="0" y="-12" width="16" height="16" fill="#2563eb"/><text x="24" y="1" class="small">Full</text>
+    <rect x="85" y="-12" width="16" height="16" fill="#ef4444"/><text x="109" y="1" class="small">No repair</text>
+    <rect x="200" y="-12" width="16" height="16" fill="#10b981"/><text x="224" y="1" class="small">No refinement</text>
+    <rect x="340" y="-12" width="16" height="16" fill="#f59e0b"/><text x="364" y="1" class="small">No aesthetic</text>
+  </g>
+</svg>

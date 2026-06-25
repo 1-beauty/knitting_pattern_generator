@@ -1,0 +1,23 @@
+stage: 2
+
+data:
+  processed_dir: dataset_processed
+  json_path: assets/instructions.json
+  use_weighted_sampling: true
+  sampling_strategy: three_tier
+
+train:
+  batch_size: 256
+  epochs: 120
+  warmup_epochs: 8
+  lr: 0.0002
+  num_workers: 4
+  val_every: 1
+  save_every: 10
+
+  mse_weight: 1.0
+  l1_weight: 0.1
+  grad_weight: 0.05
+  fft_weight: 0.05
+
+  checkpoint_dir: checkpoints/stage2

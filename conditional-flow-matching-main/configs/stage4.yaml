@@ -1,0 +1,45 @@
+stage: 4
+
+data:
+  processed_dir: dataset_processed
+  json_path: assets/instructions.json
+  patch_size: 8
+  load_to_memory: false
+  use_weighted_sampling: false
+  sampling_strategy: three_tier
+
+train:
+  batch_size: 128
+  epochs: 30
+  warmup_epochs: 2
+  lr: 0.000003
+  num_workers: 2
+  val_every: 1
+  save_every: 5
+  log_every: 100
+
+  mse_weight: 1.0
+  l1_weight: 0.12
+  grad_weight: 0.06
+  fft_weight: 0.05
+  physics_weight: 0.05
+  boundary_weight: 0.22
+
+  structure_weight: 0.12
+  structure_low_ratio: 0.90
+  structure_directional_ratio: 0.25
+  structure_mask_k: 0.50
+  structure_mask_temp: 0.025
+  structure_low_margin: 0.008
+  structure_low_allow_scale: 0.30
+
+  texture_weight: 0.08
+  texture_gamma: 2.0
+
+  sigma_inner: 0.004
+  sigma_boundary: 0.040
+  boundary_band_width: 2
+
+  patch_size: 8
+  pretrained_path: checkpoints/stage4/best.pt
+  checkpoint_dir: checkpoints/stage4

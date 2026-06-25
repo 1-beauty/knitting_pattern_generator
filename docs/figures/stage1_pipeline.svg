@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="720" viewBox="0 0 1400 720">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#27313c"/>
+    </marker>
+    <style>
+      .title { font: 700 28px Arial, "Microsoft YaHei", sans-serif; fill: #1f2933; }
+      .h { font: 700 18px Arial, "Microsoft YaHei", sans-serif; fill: #1f2933; }
+      .t { font: 14px Arial, "Microsoft YaHei", sans-serif; fill: #344054; }
+      .small { font: 12px Arial, "Microsoft YaHei", sans-serif; fill: #475467; }
+      .box { fill: #ffffff; stroke: #3f5163; stroke-width: 2; rx: 8; }
+      .blue { fill: #eef6ff; stroke: #3478a5; stroke-width: 2; rx: 8; }
+      .green { fill: #edf8f1; stroke: #3f8f5f; stroke-width: 2; rx: 8; }
+      .amber { fill: #fff6df; stroke: #c88719; stroke-width: 2; rx: 8; }
+      .red { fill: #fff0f0; stroke: #be4b49; stroke-width: 2; rx: 8; }
+      .arrow { stroke: #27313c; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #667085; stroke-width: 1.8; stroke-dasharray: 6 5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <text x="48" y="50" class="title">第一阶段：从自然语言到可制造组织色码图的五层编译流程</text>
+
+  <rect x="54" y="106" width="196" height="140" class="box"/>
+  <text x="78" y="140" class="h">Prompt</text>
+  <text x="78" y="174" class="t">自然语言输入</text>
+  <text x="78" y="202" class="small">形状、边框、纹理、背景</text>
+  <text x="78" y="224" class="small">密度、方向、位置</text>
+
+  <rect x="306" y="92" width="220" height="168" class="blue"/>
+  <text x="330" y="126" class="h">PatternPlan</text>
+  <text x="330" y="158" class="t">可编辑结构计划</text>
+  <text x="330" y="188" class="small">motif / effect / role</text>
+  <text x="330" y="210" class="small">region / params / parent_id</text>
+  <text x="330" y="232" class="small">显式表达父子层级</text>
+
+  <rect x="582" y="92" width="220" height="168" class="blue"/>
+  <text x="606" y="126" class="h">VisualSpec</text>
+  <text x="606" y="158" class="t">视觉目标层</text>
+  <text x="606" y="188" class="small">visual_shape</text>
+  <text x="606" y="210" class="small">visual_effect</text>
+  <text x="606" y="232" class="small">layout_role / placement</text>
+
+  <rect x="858" y="92" width="220" height="168" class="green"/>
+  <text x="882" y="126" class="h">RealizationPlan</text>
+  <text x="882" y="158" class="t">工艺实现层</text>
+  <text x="882" y="188" class="small">base_field / border_style</text>
+  <text x="882" y="210" class="small">event_pattern</text>
+  <text x="882" y="232" class="small">event_params</text>
+
+  <rect x="1134" y="92" width="220" height="168" class="green"/>
+  <text x="1158" y="126" class="h">EventPoint</text>
+  <text x="1158" y="158" class="t">稀疏事件层</text>
+  <text x="1158" y="188" class="small">row / col / action_abbr</text>
+  <text x="1158" y="210" class="small">region_id / reason</text>
+  <text x="1158" y="232" class="small">区域内有效事件</text>
+
+  <rect x="858" y="384" width="220" height="160" class="amber"/>
+  <text x="882" y="418" class="h">ActionGrid</text>
+  <text x="882" y="450" class="t">40 × 40 动作网格</text>
+  <text x="882" y="480" class="small">填充底布、绘制边界</text>
+  <text x="882" y="502" class="small">写入事件、过渡求解</text>
+  <text x="882" y="524" class="small">生成内部 15 色图</text>
+
+  <rect x="582" y="384" width="220" height="160" class="red"/>
+  <text x="606" y="418" class="h">约束检查与修复</text>
+  <text x="606" y="450" class="t">Hard + Craft Rules</text>
+  <text x="606" y="480" class="small">支撑、越界、冲突</text>
+  <text x="606" y="502" class="small">连续集圈、张力平衡</text>
+  <text x="606" y="524" class="small">孤立动作降级</text>
+
+  <rect x="306" y="384" width="220" height="160" class="red"/>
+  <text x="330" y="418" class="h">结构保护</text>
+  <text x="330" y="450" class="t">Layer Clip + Guards</text>
+  <text x="330" y="480" class="small">父子 mask 裁剪</text>
+  <text x="330" y="502" class="small">波浪 split/tuck 成对</text>
+  <text x="330" y="524" class="small">画布边界安全化</text>
+
+  <rect x="54" y="384" width="196" height="160" class="box"/>
+  <text x="78" y="418" class="h">输出</text>
+  <text x="78" y="450" class="t">内部色码图 P</text>
+  <text x="78" y="478" class="t">仿真输入图</text>
+  <text x="78" y="506" class="t">统计与规则报告</text>
+
+  <path d="M250 176 L301 176" class="arrow"/>
+  <path d="M526 176 L577 176" class="arrow"/>
+  <path d="M802 176 L853 176" class="arrow"/>
+  <path d="M1078 176 L1129 176" class="arrow"/>
+  <path d="M1244 260 L1244 464 L1083 464" class="arrow"/>
+  <path d="M858 464 L807 464" class="arrow"/>
+  <path d="M582 464 L531 464" class="arrow"/>
+  <path d="M306 464 L255 464" class="arrow"/>
+
+  <path d="M416 260 L416 378" class="dash"/>
+  <path d="M968 260 L968 378" class="dash"/>
+  <path d="M1244 260 L1244 334 L692 334 L692 378" class="dash"/>
+
+  <text x="430" y="334" class="small">parent_id / clip_to_parent</text>
+  <text x="988" y="334" class="small">base + border + event</text>
+  <text x="702" y="324" class="small">事件完整性与区域合法性</text>
+</svg>

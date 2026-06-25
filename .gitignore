@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+
+# Environment
+.env
+.venv/
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Outputs (large binary files)
+outputs/runs/
+*.bmp
+*.png
+*.npy
+
+# Dataset (too large for git)
+dataset_raw/
+dataset_processed/
+dataset_raw_pruned_backup/
+
+# Checkpoints (model weights)
+conditional-flow-matching-main/checkpoints/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log

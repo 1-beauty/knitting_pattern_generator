@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="680" viewBox="0 0 1300 680">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#28323d"/>
+    </marker>
+    <style>
+      .title { font: 700 28px Arial, "Microsoft YaHei", sans-serif; fill: #1f2933; }
+      .h { font: 700 18px Arial, "Microsoft YaHei", sans-serif; fill: #1f2933; }
+      .t { font: 14px Arial, "Microsoft YaHei", sans-serif; fill: #344054; }
+      .small { font: 12px Arial, "Microsoft YaHei", sans-serif; fill: #475467; }
+      .box { fill: #ffffff; stroke: #40566b; stroke-width: 2; rx: 8; }
+      .blue { fill: #eef6ff; stroke: #3478a5; stroke-width: 2; rx: 8; }
+      .green { fill: #edf8f1; stroke: #3f8f5f; stroke-width: 2; rx: 8; }
+      .amber { fill: #fff6df; stroke: #c88719; stroke-width: 2; rx: 8; }
+      .red { fill: #fff0f0; stroke: #be4b49; stroke-width: 2; rx: 8; }
+      .arrow { stroke: #28323d; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #667085; stroke-width: 1.8; stroke-dasharray: 6 5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <text x="48" y="50" class="title">第二阶段：结构感知条件流匹配仿真验证模块</text>
+
+  <rect x="54" y="108" width="220" height="142" class="box"/>
+  <text x="80" y="142" class="h">内部色码图 P</text>
+  <text x="80" y="176" class="t">40 × 40 动作编号矩阵</text>
+  <text x="80" y="204" class="small">由第一阶段生成</text>
+  <text x="80" y="226" class="small">保持内部 15 色动作语义</text>
+
+  <rect x="340" y="82" width="250" height="194" class="blue"/>
+  <text x="366" y="116" class="h">条件构造</text>
+  <text x="366" y="150" class="t">中心动作 ID</text>
+  <text x="366" y="178" class="t">3 × 3 邻域动作 ID</text>
+  <text x="366" y="206" class="t">邻域有效 mask</text>
+  <text x="366" y="234" class="small">边界位置无效邻居不参与 attention</text>
+
+  <rect x="650" y="72" width="270" height="214" class="green"/>
+  <text x="676" y="106" class="h">Stage 4 条件编码器</text>
+  <text x="676" y="140" class="t">邻域 self-attention</text>
+  <text x="676" y="168" class="t">中心-邻域 cross-attention</text>
+  <text x="676" y="196" class="t">物理特征编码</text>
+  <text x="676" y="224" class="small">tension / elasticity / stability</text>
+  <text x="676" y="248" class="small">动作语义与位置编码融合</text>
+
+  <rect x="982" y="82" width="250" height="194" class="amber"/>
+  <text x="1008" y="116" class="h">条件流匹配 UNet</text>
+  <text x="1008" y="150" class="t">预测速度场 vθ(xt,t,c)</text>
+  <text x="1008" y="178" class="t">自适应随机插值</text>
+  <text x="1008" y="206" class="small">区域内部低噪声</text>
+  <text x="1008" y="228" class="small">边界区域高噪声</text>
+  <text x="1008" y="250" class="small">ODE 推理生成仿真 patch</text>
+
+  <rect x="982" y="402" width="250" height="118" class="box"/>
+  <text x="1008" y="438" class="h">针织仿真图 S</text>
+  <text x="1008" y="472" class="t">160 × 160 效果图</text>
+  <text x="1008" y="500" class="small">用于结构连续性与视觉验证</text>
+
+  <rect x="340" y="402" width="580" height="154" class="red"/>
+  <text x="366" y="436" class="h">结构感知复合训练目标</text>
+  <text x="366" y="470" class="t">Flow loss + L1 + Gradient + FFT + Physics</text>
+  <text x="366" y="498" class="t">Boundary loss + Context-aware structure loss + Texture contrast loss</text>
+  <text x="366" y="526" class="small">同时约束像素重建、边界过渡、方向纹理、高低频结构和动作物理先验</text>
+
+  <path d="M274 179 L335 179" class="arrow"/>
+  <path d="M590 179 L645 179" class="arrow"/>
+  <path d="M920 179 L977 179" class="arrow"/>
+  <path d="M1107 276 L1107 397" class="arrow"/>
+  <path d="M785 286 L785 396" class="dash"/>
+  <path d="M630 402 L630 318 L1107 318 L1107 280" class="dash"/>
+
+  <text x="62" y="612" class="small">Stage 1: 中心动作条件</text>
+  <text x="288" y="612" class="small">Stage 2: 邻域感知条件</text>
+  <text x="524" y="612" class="small">Stage 3: 物理特征编码</text>
+  <text x="760" y="612" class="small">Stage 4: 自适应 SI + 结构复合损失</text>
+</svg>

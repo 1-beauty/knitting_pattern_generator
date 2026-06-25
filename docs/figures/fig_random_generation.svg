@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1010" height="420" viewBox="0 0 1010 420">
+  <style>
+    .title { font-family: Arial, sans-serif; font-size: 24px; font-weight: 700; fill: #1f2937; }
+    .label { font-family: Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #111827; }
+    .note { font-family: Arial, sans-serif; font-size: 14px; fill: #4b5563; }
+    .panel { fill: #ffffff; stroke: #d1d5db; stroke-width: 1.5; rx: 6; }
+  </style>
+  <rect width="1010" height="420" fill="#f8fafc"/>
+  <text x="40" y="42" class="title">Random Generation Cases</text>
+  <text x="40" y="68" class="note">The system samples structural combinations under the same action-space and rule constraints.</text>
+
+  <rect class="panel" x="40" y="96" width="280" height="280"/>
+  <image href="E:/DeskTop/knitting_pattern_generator/outputs/runs/random_case_01/color_map/random_01_output.bmp" x="60" y="116" width="240" height="240" preserveAspectRatio="xMidYMid meet"/>
+  <text x="180" y="400" text-anchor="middle" class="label">Random case 01</text>
+
+  <rect class="panel" x="365" y="96" width="280" height="280"/>
+  <image href="E:/DeskTop/knitting_pattern_generator/outputs/runs/random_case_02/color_map/random_02_output.bmp" x="385" y="116" width="240" height="240" preserveAspectRatio="xMidYMid meet"/>
+  <text x="505" y="400" text-anchor="middle" class="label">Random case 02</text>
+
+  <rect class="panel" x="690" y="96" width="280" height="280"/>
+  <image href="E:/DeskTop/knitting_pattern_generator/outputs/runs/random_case_03/color_map/random_03_output.bmp" x="710" y="116" width="240" height="240" preserveAspectRatio="xMidYMid meet"/>
+  <text x="830" y="400" text-anchor="middle" class="label">Random case 03</text>
+</svg>
