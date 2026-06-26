@@ -888,11 +888,17 @@ class VisualToRealizationConverter:
         if vr.layout_role == "border":
             if original_shape_lower in {"frame", "border", "rect", "rectangle", "square", "box"}:
                 border_style = "back_loop_outline"
-                # 矩形边框默认略厚，增强仿真图轮廓可读性
-                border_thickness = max(border_thickness, 2)
+                # 尊重 pattern plan 中指定的 border_thickness，不强制覆盖
+                # 原代码 border_thickness = max(border_thickness, 2) 会强制最小 2
+                # 但现在 pattern plan 层已经通过 _clamp_border_thickness 控制厚度
+                # 这里只需确保不为 0 即可
+                if border_thickness < 1:
+                    border_thickness = 1
                 placement["center"] = [20, 20]
+                # 尊重 pattern plan 中指定的 size，不强制上限 17
+                # 原代码 placement["size"] = min(size, 17) 会截断更大的边框
                 try:
-                    placement["size"] = min(int(placement.get("size", 17)), 17)
+                    placement["size"] = int(placement.get("size", 17))
                 except Exception:
                     placement["size"] = 17
                 placement["shape"] = "rectangle"

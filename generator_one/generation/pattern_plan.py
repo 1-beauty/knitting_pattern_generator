@@ -1121,6 +1121,15 @@ class PatternPlanEngine:
             return {"cable_period": 5, "cable_pairs": 2, "side_ratio": 0.3}
         if effect in {"relief", "honeycomb"}:
             return {"period_x": max(3, period_x - 1), "period_y": max(3, period_y - 1), "stagger": True}
+        if effect == "rib":
+            # rib 效果需要 period_x/period_y 来控制纹理周期
+            return {"period_x": period_x, "period_y": period_y}
+        if effect == "seed":
+            return {"period_x": max(3, period_x), "period_y": max(3, period_y)}
+        if effect == "links":
+            return {"period_x": period_x, "period_y": period_y}
+        if effect == "reverse":
+            return {"period_x": period_x, "period_y": period_y}
         return {}
 
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
