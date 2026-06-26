@@ -895,10 +895,11 @@ class VisualToRealizationConverter:
                 if border_thickness < 1:
                     border_thickness = 1
                 placement["center"] = [20, 20]
-                # 尊重 pattern plan 中指定的 size，不强制上限 17
-                # 原代码 placement["size"] = min(size, 17) 会截断更大的边框
+                # 边框尺寸安全限制：40x40 画布上，边框 size 最大 17
+                # 这确保边框不会太接近画布边缘（至少留 3 行边距）
+                # 原代码 min(size, 17) 是必要的，不能移除
                 try:
-                    placement["size"] = int(placement.get("size", 17))
+                    placement["size"] = min(int(placement.get("size", 17)), 17)
                 except Exception:
                     placement["size"] = 17
                 placement["shape"] = "rectangle"

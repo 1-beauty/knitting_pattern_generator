@@ -402,13 +402,15 @@ class PatternPlanEngine:
                 border_shape = "diamond"
             elif border_type == "circle":
                 border_shape = "circle"
+            # 边框尺寸限制：最大 17，确保在 40x40 画布上有足够边距
+            border_size = min(17, size + rng.choice([2, 3, 4, 5]))
             motifs.append(PatternMotif(
                 motif_id="border",
                 motif_type=border_type,
                 effect=border_effect,
                 region={
                     "center": [20, 20],
-                    "size": min(19, size + rng.choice([2, 3, 4, 5])),
+                    "size": border_size,
                     "shape": border_shape,
                 },
                 params={"border_thickness": rng.choice([1, 1, 2])},
