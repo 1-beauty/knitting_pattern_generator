@@ -179,6 +179,9 @@ class KnittingPipeline:
         action_grid, wave_pair_stats = self._step6_9_wave_pair_guard(action_grid, realization_plan)
         result.statistics["wave_pair_guard"] = wave_pair_stats
 
+        # 边框保护：最终防线，在所有 pass 完成后确保边框像素完整
+        action_grid = self._protect_border_pixels(action_grid, realization_plan)
+
         result.action_grid_40x40 = action_grid
         result.rgb_image = action_grid_to_rgb(action_grid)
         result.statistics["distribution"] = self._distribution(action_grid)
@@ -412,6 +415,77 @@ class KnittingPipeline:
         stats = {"removed_contextless_special_actions": removed}
         logger.info(f"  compiler guard: {stats}")
         return guarded, stats
+
+    def _protect_border_pixels(self, action_grid: np.ndarray, realization_plan: RealizationPlan) -> np.ndarray:
+        """在所有后处理完成后，重新确保所有 border region 的边框像素完整。
+
+        这是边框保护的最终防线。refinement、aesthetic、layer_clip 等 pass
+        可能意外修改 border 像素，这里通过重新计算边框环并强制写入 b_knit
+        来确保边框完整性。
+        """
+        border_regions = [
+            r for r in (getattr(realization_plan, "regions", []) or [])
+            if r.layout_role == "border" and getattr(r, "border_style", "none") != "none"
+        ]
+        if not border_regions:
+            return action_grid
+
+        guarded = action_grid.copy()
+        rows, cols = guarded.shape
+        b_knit = actions.idx_safe("b_knit", default=0)
+        restored = 0
+
+        for region in border_regions:
+            placement = getattr(region, "placement", {}) or {}
+            shape = str(placement.get("mask_shape", placement.get("shape", ""))).lower()
+            if not shape:
+                continue
+            thickness = int(getattr(region, "border_thickness", 1) or 1)
+            center = placement.get("center", [20, 20])
+            try:
+                cr, cc = int(center[0]), int(center[1])
+                size = int(placement.get("size", 17))
+            except Exception:
+                continue
+
+            # 对矩形边框使用简单坐标算法（不依赖 point_in_mask）
+            if shape in {"rectangle", "rect", "frame", "border", "panel", "box", "square"}:
+                # 外圈: [cr-size, cr+size] x [cc-size, cc+size]
+                # 内圈: [cr-size+t, cr+size-t] x [cc-size+t, cc+size-t]
+                outer_r0 = max(0, cr - size)
+                outer_r1 = min(rows - 1, cr + size)
+                outer_c0 = max(0, cc - size)
+                outer_c1 = min(cols - 1, cc + size)
+                inner_r0 = cr - size + thickness
+                inner_r1 = cr + size - thickness
+                inner_c0 = cc - size + thickness
+                inner_c1 = cc + size - thickness
+
+                for r in range(outer_r0, outer_r1 + 1):
+                    for c in range(outer_c0, outer_c1 + 1):
+                        # 在 outer 内但不在 inner 内 = 边框环
+                        in_outer = (outer_r0 <= r <= outer_r1) and (outer_c0 <= c <= outer_c1)
+                        in_inner = (inner_r0 <= r <= inner_r1) and (inner_c0 <= c <= inner_c1)
+                        if in_outer and not in_inner:
+                            if guarded[r, c] != b_knit:
+                                guarded[r, c] = b_knit
+                                restored += 1
+            else:
+                # 其他形状使用 point_in_mask
+                for r in range(max(0, cr - size), min(rows, cr + size + 1)):
+                    for c in range(max(0, cc - size), min(cols, cc + size + 1)):
+                        if point_in_mask(r, c, placement, rows):
+                            inner_placement = dict(placement)
+                            inner_placement["size"] = max(0, size - thickness)
+                            if size - thickness > 0 and point_in_mask(r, c, inner_placement, rows):
+                                continue
+                            if guarded[r, c] != b_knit:
+                                guarded[r, c] = b_knit
+                                restored += 1
+
+        if restored:
+            logger.info(f"  border protection: {restored} pixels restored")
+        return guarded
 
     def _step6_75_canvas_margin(self, action_grid: np.ndarray, margin: int = 1):
         """Keep the final image boundary as plain background.

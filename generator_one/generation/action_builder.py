@@ -114,6 +114,10 @@ class ActionBuilder:
         if clipped:
             logger.info(f"  action builder: clipped child spillovers={clipped}")
 
+        # Step 6: 边框保护修复。过渡求解和 spillover 裁剪可能意外覆盖
+        # border 像素，这里重新绘制所有 border region 的边框轮廓。
+        self._restore_border_pixels(grid, realization_plan)
+
         self._regions_by_id = {}
         return grid
 
@@ -552,10 +556,13 @@ class ActionBuilder:
         )
 
         child_regions = []
+        border_regions = []
         for region in regions:
             placement = getattr(region, "placement", {}) or {}
             if placement.get("clip_to_parent") or placement.get("parent_id"):
                 child_regions.append(region)
+            if region.layout_role == "border" and region.border_style != "none":
+                border_regions.append(region)
 
         if not child_regions:
             return 0
@@ -574,10 +581,62 @@ class ActionBuilder:
                         continue
                     if self._event_in_region(r, c, region):
                         continue
-                    grid[r, c] = self._f_knit
+                    # 保护边框像素：如果该像素属于任何 border region 的边框环，
+                    # 恢复为 b_knit 而不是 f_knit
+                    restored = False
+                    for br in border_regions:
+                        if self._is_on_border_outline(r, c, br):
+                            grid[r, c] = self._b_knit
+                            restored = True
+                            break
+                    if not restored:
+                        grid[r, c] = self._f_knit
                     clipped += 1
 
         return clipped
+
+    def _is_on_border_outline(self, r: int, c: int, border_region: RealizationRegion) -> bool:
+        """检查像素 (r,c) 是否位于指定 border region 的边框轮廓上。"""
+        if border_region.border_style == "none":
+            return False
+        shape = self._get_shape(border_region)
+        if not self._inside_shape(shape, r, c, border_region):
+            return False
+        if not self._inside_layer_stack(r, c, border_region):
+            return False
+        thickness = border_region.border_thickness
+        return self._is_border(shape, r, c, border_region, thickness)
+
+    def _restore_border_pixels(self, grid: np.ndarray, realization_plan: RealizationPlan):
+        """在所有事件写入和裁剪后，重新绘制所有 border region 的边框轮廓。
+        确保过渡求解、spillover 裁剪等不会破坏边框像素。
+        """
+        border_regions = [
+            r for r in (realization_plan.regions or [])
+            if r.layout_role == "border" and r.border_style != "none"
+        ]
+        if not border_regions:
+            return
+
+        restored = 0
+        for region in border_regions:
+            shape = self._get_shape(region)
+            thickness = region.border_thickness
+            r0, c0, r1, c1 = self._get_bbox(region)
+
+            for r in range(max(0, r0), min(self.grid_size, r1 + 1)):
+                for c in range(max(0, c0), min(self.grid_size, c1 + 1)):
+                    if not self._inside_shape(shape, r, c, region):
+                        continue
+                    if not self._inside_layer_stack(r, c, region):
+                        continue
+                    if self._is_border(shape, r, c, region, thickness):
+                        if grid[r, c] != self._b_knit:
+                            grid[r, c] = self._b_knit
+                            restored += 1
+
+        if restored:
+            logger.info(f"  border restoration: {restored} pixels restored")
 
 
     def _resolve_side_band_side(self, region: RealizationRegion) -> str:
