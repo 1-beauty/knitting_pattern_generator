@@ -104,6 +104,12 @@ def generate_color_map(args, run_dir):
         cmd.append("--no-repair")
     if getattr(args, "no_plan", False):
         cmd.append("--no-plan")
+    fixed_plan = getattr(args, "fixed_plan", None)
+    if fixed_plan:
+        fp = Path(fixed_plan)
+        if not fp.is_absolute():
+            fp = (ROOT / fp).resolve()
+        cmd.extend(["--fixed-plan", str(fp)])
     if getattr(args, "plan_in", None):
         plan_in = Path(args.plan_in)
         if not plan_in.is_absolute():
@@ -245,6 +251,8 @@ def parse_args():
     color.add_argument("--plan-in", type=Path, default=None)
     color.add_argument("--no-plan", action="store_true",
                        help="[基线] 跳过 PatternPlan 层次化结构计划")
+    color.add_argument("--fixed-plan", type=Path, default=None,
+                       help="[消融] 加载固定 plan，跳过 LLM")
 
     sim = subparsers.add_parser("simulate", parents=[common], help="Run simulation only")
     sim.add_argument("--input", required=True, type=Path, help="Existing color map path")
@@ -259,6 +267,8 @@ def parse_args():
     all_mode.add_argument("--plan-in", type=Path, default=None)
     all_mode.add_argument("--no-plan", action="store_true",
                           help="[基线] 跳过 PatternPlan 层次化结构计划")
+    all_mode.add_argument("--fixed-plan", type=Path, default=None,
+                          help="[消融] 加载固定 plan，跳过 LLM")
 
     return parser.parse_args()
 

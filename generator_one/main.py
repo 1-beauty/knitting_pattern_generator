@@ -91,6 +91,12 @@ Examples:
         action="store_true",
         help="[基线] 跳过 PatternPlan 层次化结构计划，直接使用扁平 VisualSpec"
     )
+    gen_parser.add_argument(
+        "--fixed-plan",
+        type=str,
+        default=None,
+        help="[消融] 加载固定 pattern_plan.json，跳过 LLM 生成，控制变量"
+    )
 
     # ========== random 子命令 ==========
     random_parser = subparsers.add_parser("random", help="随机生成图案")
@@ -106,6 +112,7 @@ Examples:
     random_parser.add_argument("--no-refinement", action="store_true")
     random_parser.add_argument("--no-aesthetic", action="store_true")
     random_parser.add_argument("--no-repair", action="store_true")
+    random_parser.add_argument("--fixed-plan", type=str, default=None, help="[消融] 加载固定 plan，跳过 LLM")
 
     args = parser.parse_args()
 
@@ -140,6 +147,7 @@ def run_generation(args):
         enable_llm_repair=not args.no_repair,
         save_intermediate=args.save_intermediate,
         skip_pattern_plan=getattr(args, 'no_plan', False),
+        fixed_plan_path=getattr(args, 'fixed_plan', None) or "",
     )
 
     llm_client = LLMClient()

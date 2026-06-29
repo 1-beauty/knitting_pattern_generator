@@ -77,6 +77,7 @@ class PipelineConfig:
     output_scale: int = 1
     save_intermediate: bool = False
     skip_pattern_plan: bool = False  # Baseline: skip PatternPlan hierarchy
+    fixed_plan_path: str = ""  # Ablation: reuse a fixed pattern_plan JSON, skip LLM
 
 
 @dataclass
@@ -203,30 +204,39 @@ class KnittingPipeline:
     ) -> tuple[PatternPlan, VisualSpec]:
         logger.info("[1/8] Pattern plan design/edit...")
 
-        # 随机模式：直接调用随机生成器，不走 LLM。
-        # LLM 对随机指令的输出偏向固定模板（菱形+矩形框），
-        # 而 random_plan() 的候选池有 60+ 种组合，多样性更好。
-        is_random_mode = (
-            current_plan is None
-            and any(k in user_input for k in ["随机", "随便", "生成一些", "灵感"])
-            or "random" in user_input.lower()
-        )
-        if is_random_mode:
-            logger.info("  Random mode detected, using random_plan() directly")
-            pattern_plan = self.plan_engine.from_prompt(user_input, current_plan=current_plan)
+        # Ablation 模式：直接加载固定 plan，跳过 LLM
+        if self.config.fixed_plan_path:
+            import json
+            from pathlib import Path
+            plan_file = Path(self.config.fixed_plan_path)
+            logger.info(f"  [ABLATION] fixed_plan_path={plan_file}, skipping LLM")
+            with open(plan_file, "r", encoding="utf-8") as f:
+                pattern_plan = PatternPlan.from_dict(json.load(f))
         else:
-            messages = self.prompt_builder.build_pattern_plan_messages(user_input, current_plan=current_plan)
-            response = self.llm_client.chat(messages)
-
-            if not response.success:
-                logger.error(f"LLM failed: {response.error}")
+            # 随机模式：直接调用随机生成器，不走 LLM。
+            # LLM 对随机指令的输出偏向固定模板（菱形+矩形框），
+            # 而 random_plan() 的候选池有 60+ 种组合，多样性更好。
+            is_random_mode = (
+                current_plan is None
+                and any(k in user_input for k in ["随机", "随便", "生成一些", "灵感"])
+                or "random" in user_input.lower()
+            )
+            if is_random_mode:
+                logger.info("  Random mode detected, using random_plan() directly")
                 pattern_plan = self.plan_engine.from_prompt(user_input, current_plan=current_plan)
             else:
-                pattern_plan = self.plan_engine.parse_or_fallback(
-                    response.content,
-                    user_input=user_input,
-                    current_plan=current_plan,
-                )
+                messages = self.prompt_builder.build_pattern_plan_messages(user_input, current_plan=current_plan)
+                response = self.llm_client.chat(messages)
+
+                if not response.success:
+                    logger.error(f"LLM failed: {response.error}")
+                    pattern_plan = self.plan_engine.from_prompt(user_input, current_plan=current_plan)
+                else:
+                    pattern_plan = self.plan_engine.parse_or_fallback(
+                        response.content,
+                        user_input=user_input,
+                        current_plan=current_plan,
+                    )
 
         # Baseline: skip PatternPlan hierarchy
         if self.config.skip_pattern_plan:
