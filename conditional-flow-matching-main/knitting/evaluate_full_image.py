@@ -100,10 +100,10 @@ def sample_pairs(pairs, num_images=50, seed=42):
 # 图像 / id_matrix 处理
 # ══════════════════════════════════════════════════════════════════
 
-def load_gt_image_01(sim_path):
+def load_gt_image_01(sim_path, target_size=None):
     img = Image.open(sim_path).convert('RGB')
-    if img.size != (160, 160):
-        img = img.resize((160, 160), Image.BICUBIC)
+    if target_size is not None and img.size != target_size:
+        img = img.resize(target_size, Image.BICUBIC)
     arr = np.array(img, dtype=np.float32) / 255.0
     return arr
 
@@ -148,12 +148,14 @@ def full_psnr(pred_01, gt_01):
     return 10.0 * np.log10(1.0 / mse)
 
 
-def patch_mean_map(img_01):
+def patch_mean_map(img_01, patch_size=16):
     """
-    img_01: (160,160,3)
-    return: (10,10) patch mean
+    img_01: (H, W, 3)  H = grid_h * patch_size, W = grid_w * patch_size
+    return: (grid_h, grid_w) patch mean
     """
-    blocks = img_01.reshape(10, 16, 10, 16, 3).transpose(0, 2, 1, 3, 4)
+    H, W = img_01.shape[:2]
+    gh, gw = H // patch_size, W // patch_size
+    blocks = img_01.reshape(gh, patch_size, gw, patch_size, 3).transpose(0, 2, 1, 3, 4)
     return blocks.mean(axis=(2, 3, 4))
 
 
@@ -161,7 +163,7 @@ def patch_mean_map(img_01):
 # 自定义 full-image 指标
 # ══════════════════════════════════════════════════════════════════
 
-def seam_errors(pred_01, gt_01, id_matrix):
+def seam_errors(pred_01, gt_01, id_matrix, patch_size=16):
     """
     计算接缝误差：
       - SeamErr_same: 同ID相邻块的接缝误差
@@ -173,26 +175,25 @@ def seam_errors(pred_01, gt_01, id_matrix):
     """
     same_errs = []
     diff_errs = []
+    gh, gw = id_matrix.shape
 
     def seam_diff_vertical(img, row, col_boundary):
-        # 在某一行块 row 内，垂直接缝 c|c+1
-        r0, r1 = row * 16, (row + 1) * 16
-        c = col_boundary * 16
+        r0, r1 = row * patch_size, (row + 1) * patch_size
+        c = col_boundary * patch_size
         left  = img[r0:r1, c - 1, :]
         right = img[r0:r1, c, :]
         return np.mean(np.abs(left - right))
 
     def seam_diff_horizontal(img, row_boundary, col):
-        # 在某一列块 col 内，水平接缝 r|r+1
-        c0, c1 = col * 16, (col + 1) * 16
-        r = row_boundary * 16
+        c0, c1 = col * patch_size, (col + 1) * patch_size
+        r = row_boundary * patch_size
         up   = img[r - 1, c0:c1, :]
         down = img[r, c0:c1, :]
         return np.mean(np.abs(up - down))
 
     # 横向相邻（左右）
-    for r in range(10):
-        for c in range(9):
+    for r in range(gh):
+        for c in range(gw - 1):
             pred_diff = seam_diff_vertical(pred_01, r, c + 1)
             gt_diff   = seam_diff_vertical(gt_01,   r, c + 1)
             err = abs(pred_diff - gt_diff)
@@ -203,8 +204,8 @@ def seam_errors(pred_01, gt_01, id_matrix):
                 diff_errs.append(err)
 
     # 纵向相邻（上下）
-    for r in range(9):
-        for c in range(10):
+    for r in range(gh - 1):
+        for c in range(gw):
             pred_diff = seam_diff_horizontal(pred_01, r + 1, c)
             gt_diff   = seam_diff_horizontal(gt_01,   r + 1, c)
             err = abs(pred_diff - gt_diff)
@@ -256,7 +257,7 @@ def find_connected_components(id_matrix):
     return components
 
 
-def region_outlier_ratio(pred_01, id_matrix, min_region_size=4):
+def region_outlier_ratio(pred_01, id_matrix, min_region_size=4, patch_size=16):
     """
     在同ID连通区域内统计 patch mean 的异常块比例
     用于刻画：
@@ -264,7 +265,7 @@ def region_outlier_ratio(pred_01, id_matrix, min_region_size=4):
       - 凭空长出的细线
       - 同类区域内部的异常跳变
     """
-    pmap = patch_mean_map(pred_01)  # (10,10)
+    pmap = patch_mean_map(pred_01, patch_size=patch_size)  # (grid_h, grid_w)
     comps = find_connected_components(id_matrix)
 
     outlier_count = 0
@@ -288,15 +289,15 @@ def region_outlier_ratio(pred_01, id_matrix, min_region_size=4):
     return float(outlier_count / total_count)
 
 
-def region_variance_gap(pred_01, gt_01, id_matrix, min_region_size=4):
+def region_variance_gap(pred_01, gt_01, id_matrix, min_region_size=4, patch_size=16):
     """
     比较同ID连通区域内 patch mean 方差的差距
     反映：
       - 粗细不均匀
       - 区域内部稳定性不如 GT
     """
-    pmap = patch_mean_map(pred_01)
-    gmap = patch_mean_map(gt_01)
+    pmap = patch_mean_map(pred_01, patch_size=patch_size)
+    gmap = patch_mean_map(gt_01, patch_size=patch_size)
     comps = find_connected_components(id_matrix)
 
     gaps = []
@@ -366,8 +367,11 @@ def evaluate_full_image_stage(
         )
 
         pred_01 = np.array(pred_img, dtype=np.float32) / 255.0
-        gt_01   = load_gt_image_01(sim_path)
+        gt_01   = load_gt_image_01(sim_path, target_size=pred_img.size)
         id_mat  = parse_color_map_to_id_matrix(color_path, color_table)
+
+        # 动态推导 patch_size（不同 stage 可能不同，如 stage4=8）
+        ps = pred_01.shape[0] // id_mat.shape[0]
 
         # ── base full-image metrics ───────────────────────────────
         mse = np.mean((pred_01 - gt_01) ** 2)
@@ -385,9 +389,9 @@ def evaluate_full_image_stage(
             metrics_sum['Full_SSIM'] += float(ssim_v)
 
         # ── custom full-image metrics ─────────────────────────────
-        seam_same, seam_diff = seam_errors(pred_01, gt_01, id_mat)
-        outlier_ratio = region_outlier_ratio(pred_01, id_mat)
-        var_gap = region_variance_gap(pred_01, gt_01, id_mat)
+        seam_same, seam_diff = seam_errors(pred_01, gt_01, id_mat, patch_size=ps)
+        outlier_ratio = region_outlier_ratio(pred_01, id_mat, patch_size=ps)
+        var_gap = region_variance_gap(pred_01, gt_01, id_mat, patch_size=ps)
 
         metrics_sum['SeamErr_same']  += seam_same
         metrics_sum['SeamErr_diff']  += seam_diff

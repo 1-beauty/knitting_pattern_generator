@@ -1,0 +1,313 @@
+{
+  "num_images": 50,
+  "solver": "midpoint",
+  "num_steps": 300,
+  "noise_mode_nonstage1": "global_correlated",
+  "perturb_scale": 0.03,
+  "region_alpha": 0.88,
+  "split_seed": 42,
+  "eval_seed": 42,
+  "val_ratio": 0.1,
+  "val_pairs": [
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable1_007_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable1_007_0_0.jpg",
+      "category": "Cable",
+      "stem": "Cable1_007_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable1_025_0_16.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable1_025_0_16.jpg",
+      "category": "Cable",
+      "stem": "Cable1_025_0_16"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable1_042_0_12.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable1_042_0_12.jpg",
+      "category": "Cable",
+      "stem": "Cable1_042_0_12"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable1_056_0_6.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable1_056_0_6.jpg",
+      "category": "Cable",
+      "stem": "Cable1_056_0_6"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable1_062_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable1_062_0_0.jpg",
+      "category": "Cable",
+      "stem": "Cable1_062_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable1_071_9_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable1_071_9_0.jpg",
+      "category": "Cable",
+      "stem": "Cable1_071_9_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable1_085_0_8.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable1_085_0_8.jpg",
+      "category": "Cable",
+      "stem": "Cable1_085_0_8"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable2_013A_0_9.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable2_013A_0_9.jpg",
+      "category": "Cable",
+      "stem": "Cable2_013A_0_9"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable2_014_0_17.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable2_014_0_17.jpg",
+      "category": "Cable",
+      "stem": "Cable2_014_0_17"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable2_018_0_7.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable2_018_0_7.jpg",
+      "category": "Cable",
+      "stem": "Cable2_018_0_7"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable2_046_8_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable2_046_8_0.jpg",
+      "category": "Cable",
+      "stem": "Cable2_046_8_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable2_058_0_12.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable2_058_0_12.jpg",
+      "category": "Cable",
+      "stem": "Cable2_058_0_12"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable2_059_0_12.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable2_059_0_12.jpg",
+      "category": "Cable",
+      "stem": "Cable2_059_0_12"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Cable/Cable2_067_0_16.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Cable/Cable2_067_0_16.jpg",
+      "category": "Cable",
+      "stem": "Cable2_067_0_16"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Hem/Hem_008A_6_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Hem/Hem_008A_6_0.jpg",
+      "category": "Hem",
+      "stem": "Hem_008A_6_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Hem/Hem_052_0_18.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Hem/Hem_052_0_18.jpg",
+      "category": "Hem",
+      "stem": "Hem_052_0_18"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Hem/Hem_053_10_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Hem/Hem_053_10_0.jpg",
+      "category": "Hem",
+      "stem": "Hem_053_10_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Links/Links1_040_0_13.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Links/Links1_040_0_13.jpg",
+      "category": "Links",
+      "stem": "Links1_040_0_13"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Links/Links2_001_6_9.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Links/Links2_001_6_9.jpg",
+      "category": "Links",
+      "stem": "Links2_001_6_9"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Links/Links2_006_12_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Links/Links2_006_12_0.jpg",
+      "category": "Links",
+      "stem": "Links2_006_12_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Links/Links2_010_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Links/Links2_010_0_0.jpg",
+      "category": "Links",
+      "stem": "Links2_010_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Links/Links2_035_10_7.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Links/Links2_035_10_7.jpg",
+      "category": "Links",
+      "stem": "Links2_035_10_7"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Links/Links2_042_14_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Links/Links2_042_14_0.jpg",
+      "category": "Links",
+      "stem": "Links2_042_14_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Mesh/Mesh_022A_12_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Mesh/Mesh_022A_12_0.jpg",
+      "category": "Mesh",
+      "stem": "Mesh_022A_12_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Mesh/Mesh_024A_0_25.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Mesh/Mesh_024A_0_25.jpg",
+      "category": "Mesh",
+      "stem": "Mesh_024A_0_25"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Miss/Miss_010_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Miss/Miss_010_0_0.jpg",
+      "category": "Miss",
+      "stem": "Miss_010_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Miss/Miss_053_0_9.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Miss/Miss_053_0_9.jpg",
+      "category": "Miss",
+      "stem": "Miss_053_0_9"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Miss/Miss_060_0_7.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Miss/Miss_060_0_7.jpg",
+      "category": "Miss",
+      "stem": "Miss_060_0_7"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Miss/Miss_Border026_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Miss/Miss_Border026_0_0.jpg",
+      "category": "Miss",
+      "stem": "Miss_Border026_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Miss/Miss_Border054A_7_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Miss/Miss_Border054A_7_0.jpg",
+      "category": "Miss",
+      "stem": "Miss_Border054A_7_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move1_003A_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move1_003A_0_0.jpg",
+      "category": "Move",
+      "stem": "Move1_003A_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move1_Bias10_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move1_Bias10_0_0.jpg",
+      "category": "Move",
+      "stem": "Move1_Bias10_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move1_Bias30A_6_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move1_Bias30A_6_0.jpg",
+      "category": "Move",
+      "stem": "Move1_Bias30A_6_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move1_Diamond16_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move1_Diamond16_0_0.jpg",
+      "category": "Move",
+      "stem": "Move1_Diamond16_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move1_Diamond21A_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move1_Diamond21A_0_0.jpg",
+      "category": "Move",
+      "stem": "Move1_Diamond21A_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move1_Diamond44A_0_7.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move1_Diamond44A_0_7.jpg",
+      "category": "Move",
+      "stem": "Move1_Diamond44A_0_7"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move1_Diamond53_0_13.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move1_Diamond53_0_13.jpg",
+      "category": "Move",
+      "stem": "Move1_Diamond53_0_13"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move1_Leaf03_0_11.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move1_Leaf03_0_11.jpg",
+      "category": "Move",
+      "stem": "Move1_Leaf03_0_11"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move2_062B_10_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move2_062B_10_0.jpg",
+      "category": "Move",
+      "stem": "Move2_062B_10_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move2_076A_0_18.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move2_076A_0_18.jpg",
+      "category": "Move",
+      "stem": "Move2_076A_0_18"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move2_079_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move2_079_0_0.jpg",
+      "category": "Move",
+      "stem": "Move2_079_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move2_113_0_15.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move2_113_0_15.jpg",
+      "category": "Move",
+      "stem": "Move2_113_0_15"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Move/Move2_Motif04_10_10.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Move/Move2_Motif04_10_10.jpg",
+      "category": "Move",
+      "stem": "Move2_Motif04_10_10"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Tuck/Tuck_007_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Tuck/Tuck_007_0_0.jpg",
+      "category": "Tuck",
+      "stem": "Tuck_007_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Tuck/Tuck_015A_0_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Tuck/Tuck_015A_0_0.jpg",
+      "category": "Tuck",
+      "stem": "Tuck_015A_0_0"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Tuck/Tuck_028_0_9.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Tuck/Tuck_028_0_9.jpg",
+      "category": "Tuck",
+      "stem": "Tuck_028_0_9"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Tuck/Tuck_031_0_12.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Tuck/Tuck_031_0_12.jpg",
+      "category": "Tuck",
+      "stem": "Tuck_031_0_12"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Tuck/Tuck_039_0_22.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Tuck/Tuck_039_0_22.jpg",
+      "category": "Tuck",
+      "stem": "Tuck_039_0_22"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Tuck/Tuck_040A_12_9.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Tuck/Tuck_040A_12_9.jpg",
+      "category": "Tuck",
+      "stem": "Tuck_040A_12_9"
+    },
+    {
+      "color_map": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/color_maps/Tuck/Tuck_041A_12_0.png",
+      "simulation": "/data/wr/knitting_pattern_generator/conditional-flow-matching-main/dataset_raw/simulations/Tuck/Tuck_041A_12_0.jpg",
+      "category": "Tuck",
+      "stem": "Tuck_041A_12_0"
+    }
+  ]
+}

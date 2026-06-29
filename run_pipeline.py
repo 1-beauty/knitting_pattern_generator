@@ -59,13 +59,23 @@ def timestamp():
 
 
 def run_dir_from_sim_input(input_path):
+    """Derive the run directory from a sim_input.png path.
+
+    Supports both flat (outputs/runs/<name>/color_map/...) and
+    nested (outputs/runs/<category>/<name>/color_map/...) layouts.
+    """
     try:
         rel = input_path.resolve().relative_to((ROOT / "outputs" / "runs").resolve())
     except ValueError:
         return None
     parts = rel.parts
-    if len(parts) >= 3 and parts[1] == "color_map":
-        return ROOT / "outputs" / "runs" / parts[0]
+    # Find the 'color_map' segment; everything before it is the run name
+    try:
+        cm_idx = list(parts).index("color_map")
+    except ValueError:
+        return None
+    if cm_idx >= 1:
+        return ROOT / "outputs" / "runs" / Path(*parts[:cm_idx])
     return None
 
 
@@ -92,6 +102,8 @@ def generate_color_map(args, run_dir):
         cmd.append("--no-aesthetic")
     if args.no_repair:
         cmd.append("--no-repair")
+    if getattr(args, "no_plan", False):
+        cmd.append("--no-plan")
     if getattr(args, "plan_in", None):
         plan_in = Path(args.plan_in)
         if not plan_in.is_absolute():
@@ -231,6 +243,8 @@ def parse_args():
     color.add_argument("--no-aesthetic", action="store_true")
     color.add_argument("--no-repair", action="store_true")
     color.add_argument("--plan-in", type=Path, default=None)
+    color.add_argument("--no-plan", action="store_true",
+                       help="[基线] 跳过 PatternPlan 层次化结构计划")
 
     sim = subparsers.add_parser("simulate", parents=[common], help="Run simulation only")
     sim.add_argument("--input", required=True, type=Path, help="Existing color map path")
@@ -243,6 +257,8 @@ def parse_args():
     all_mode.add_argument("--no-aesthetic", action="store_true")
     all_mode.add_argument("--no-repair", action="store_true")
     all_mode.add_argument("--plan-in", type=Path, default=None)
+    all_mode.add_argument("--no-plan", action="store_true",
+                          help="[基线] 跳过 PatternPlan 层次化结构计划")
 
     return parser.parse_args()
 

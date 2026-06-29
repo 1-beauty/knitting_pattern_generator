@@ -86,6 +86,11 @@ Examples:
         default=None,
         help="读取已有 pattern_plan.json，用于增量修改"
     )
+    gen_parser.add_argument(
+        "--no-plan",
+        action="store_true",
+        help="[基线] 跳过 PatternPlan 层次化结构计划，直接使用扁平 VisualSpec"
+    )
 
     # ========== random 子命令 ==========
     random_parser = subparsers.add_parser("random", help="随机生成图案")
@@ -134,6 +139,7 @@ def run_generation(args):
         enable_aesthetic=not args.no_aesthetic,
         enable_llm_repair=not args.no_repair,
         save_intermediate=args.save_intermediate,
+        skip_pattern_plan=getattr(args, 'no_plan', False),
     )
 
     llm_client = LLMClient()

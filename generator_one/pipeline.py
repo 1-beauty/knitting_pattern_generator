@@ -76,6 +76,7 @@ class PipelineConfig:
     max_repair_rounds: int = 1
     output_scale: int = 1
     save_intermediate: bool = False
+    skip_pattern_plan: bool = False  # Baseline: skip PatternPlan hierarchy
 
 
 @dataclass
@@ -226,6 +227,12 @@ class KnittingPipeline:
                     user_input=user_input,
                     current_plan=current_plan,
                 )
+
+        # Baseline: skip PatternPlan hierarchy
+        if self.config.skip_pattern_plan:
+            logger.info("  [BASELINE] skip_pattern_plan=True, using flat plan from VisualSpec")
+            spec_full = self.plan_engine.render_visual_spec(pattern_plan)
+            pattern_plan = self.plan_engine.from_visual_spec_flat(spec_full)
 
         spec = self.plan_engine.render_visual_spec(pattern_plan)
 
@@ -422,6 +429,8 @@ class KnittingPipeline:
         这是边框保护的最终防线。refinement、aesthetic、layer_clip 等 pass
         可能意外修改 border 像素，这里通过重新计算边框环并强制写入 b_knit
         来确保边框完整性。
+        
+        关键修复：不覆盖任何 child texture region 内的像素。
         """
         border_regions = [
             r for r in (getattr(realization_plan, "regions", []) or [])
@@ -434,6 +443,14 @@ class KnittingPipeline:
         rows, cols = guarded.shape
         b_knit = actions.idx_safe("b_knit", default=0)
         restored = 0
+
+        # 收集所有 child texture regions 的掩码信息
+        child_texture_placements = []
+        for r in (getattr(realization_plan, "regions", []) or []):
+            placement = getattr(r, "placement", {}) or {}
+            if (placement.get("clip_to_parent") or placement.get("parent_id")) and r.layout_role != "border":
+                if has_mask_shape(placement):
+                    child_texture_placements.append(placement)
 
         for region in border_regions:
             placement = getattr(region, "placement", {}) or {}
@@ -467,6 +484,17 @@ class KnittingPipeline:
                         in_outer = (outer_r0 <= r <= outer_r1) and (outer_c0 <= c <= outer_c1)
                         in_inner = (inner_r0 <= r <= inner_r1) and (inner_c0 <= c <= inner_c1)
                         if in_outer and not in_inner:
+                            # 保护：不覆盖 child texture region 内的像素
+                            inside_child = False
+                            for child_placement in child_texture_placements:
+                                try:
+                                    if point_in_mask(r, c, child_placement, rows):
+                                        inside_child = True
+                                        break
+                                except Exception:
+                                    pass
+                            if inside_child:
+                                continue
                             if guarded[r, c] != b_knit:
                                 guarded[r, c] = b_knit
                                 restored += 1
@@ -478,6 +506,17 @@ class KnittingPipeline:
                             inner_placement = dict(placement)
                             inner_placement["size"] = max(0, size - thickness)
                             if size - thickness > 0 and point_in_mask(r, c, inner_placement, rows):
+                                continue
+                            # 保护：不覆盖 child texture region 内的像素
+                            inside_child = False
+                            for child_placement in child_texture_placements:
+                                try:
+                                    if point_in_mask(r, c, child_placement, rows):
+                                        inside_child = True
+                                        break
+                                except Exception:
+                                    pass
+                            if inside_child:
                                 continue
                             if guarded[r, c] != b_knit:
                                 guarded[r, c] = b_knit

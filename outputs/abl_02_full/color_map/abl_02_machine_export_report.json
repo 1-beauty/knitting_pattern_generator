@@ -1,0 +1,56 @@
+{
+  "summary": {
+    "safe_action_kinds": 3,
+    "requires_confirmation_action_kinds": 1,
+    "unmapped_action_kinds": 0,
+    "requires_confirmation_cell_count": 54,
+    "unmapped_cell_count": 0,
+    "note": "机器 BMP 使用恒强机器色表颜色；requires_confirmation 动作需要打版师确认宏参数、度目或速度后再上机。"
+  },
+  "mapped_actions": [
+    {
+      "abbr": "f_knit",
+      "count": 1246,
+      "internal_color": "#FF0010",
+      "export_color": "#800000",
+      "machine_export_safe": true,
+      "machine_export_requires_confirmation": false,
+      "machine_action_id": 1,
+      "machine_action_name": "前床编织（有翻针动作）"
+    },
+    {
+      "abbr": "b_knit",
+      "count": 246,
+      "internal_color": "#2BCE48",
+      "export_color": "#008000",
+      "machine_export_safe": true,
+      "machine_export_requires_confirmation": false,
+      "machine_action_id": 2,
+      "machine_action_name": "后床编织（有翻针动作）"
+    },
+    {
+      "abbr": "f_tuck",
+      "count": 54,
+      "internal_color": "#00A4FF",
+      "export_color": "#000080",
+      "machine_export_safe": true,
+      "machine_export_requires_confirmation": false,
+      "machine_action_id": 4,
+      "machine_action_name": "前吊目"
+    }
+  ],
+  "requires_confirmation_actions": [
+    {
+      "abbr": "f_split",
+      "count": 54,
+      "internal_color": "#FFE606",
+      "export_color": "#C71C03",
+      "machine_export_safe": true,
+      "machine_export_requires_confirmation": true,
+      "machine_action_id": 60,
+      "machine_action_name": "前编织+翻针至后，翻针至前",
+      "issue": "高危复合动作：上机时必须调松对应行度目并降速，检查后床目标针是否有线圈，避免撞针。"
+    }
+  ],
+  "unmapped_actions": []
+}

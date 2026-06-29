@@ -378,6 +378,59 @@ def generate_single_image(
     return result, resolved_noise_mode
 
 
+def generate_full_image(
+    color_map_path,
+    model_path,
+    json_path,
+    stage,
+    device='cuda',
+    num_steps=300,
+    solver='midpoint',
+    noise_mode='global_correlated',
+    perturb_scale=0.03,
+    region_alpha=0.88,
+    seed=42,
+    batch_size=100,
+):
+    """
+    高层推理接口：给定色码图路径和模型路径，直接输出完整仿真 PIL Image。
+    供 evaluate_full_image.py 等外部评估脚本调用。
+    """
+    device = resolve_device(device)
+    model = load_model(stage, model_path, json_path, device)
+
+    color_table = load_color_table(json_path)
+
+    # 尝试 dataset 格式，失败则尝试 stage1 格式
+    try:
+        id_matrix = parse_color_map(color_map_path, color_table)
+    except Exception:
+        id_matrix = parse_stage1_color_map(color_map_path, color_table)
+
+    # 下采样到 10x10（与训练时 parse_color_map_to_id_matrix 保持一致）
+    if id_matrix.shape[0] > 10 or id_matrix.shape[1] > 10:
+        id_matrix = id_matrix[::2, ::2]
+
+    all_neighbor_ids, all_neighbor_mask = build_neighbor_inputs(id_matrix, device)
+
+    result_img, _ = generate_single_image(
+        model=model,
+        id_matrix=id_matrix,
+        all_neighbor_ids=all_neighbor_ids,
+        all_neighbor_mask=all_neighbor_mask,
+        stage=stage,
+        device=device,
+        num_steps=num_steps,
+        solver=solver,
+        noise_mode=noise_mode,
+        perturb_scale=perturb_scale,
+        region_alpha=region_alpha,
+        seed=seed,
+        batch_size=batch_size,
+    )
+    return result_img
+
+
 # ══════════════════════════════════════════════════════════════════
 # 候选拼图
 # ══════════════════════════════════════════════════════════════════

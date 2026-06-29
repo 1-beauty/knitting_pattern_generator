@@ -299,6 +299,14 @@ class VisualToRealizationConverter:
             # 不阻塞主流程
             logger.debug("  nested region alignment failed, continuing")
 
+        # 关键修复：对齐完成后，清除 child texture 区域的轮廓。
+        # _align_nested_regions 会设置 parent_id/clip_to_parent，此时才能
+        # 准确识别 child texture。如果不消除轮廓，会出现"双层圆环"等问题。
+        try:
+            self._clear_child_texture_outlines(plan)
+        except Exception:
+            logger.debug("  child texture outline clearing failed, continuing")
+
         try:
             self._protect_child_textures_from_parent(plan)
         except Exception:
@@ -535,6 +543,30 @@ class VisualToRealizationConverter:
             placement.pop("_user_size", None)
             placement.pop("_requested_size", None)
             r.placement = placement
+
+    def _clear_child_texture_outlines(self, plan: RealizationPlan):
+        """在 _align_nested_regions 设置 parent_id 之后，清除 child texture 的轮廓。
+
+        当 border region 作为父级、纹理 region 作为子级时，子级的轮廓
+        会产生"双层圆环"等视觉冗余。纹理本身已定义形状边界，不需要额外轮廓。
+        """
+        for r in getattr(plan, "regions", []) or []:
+            placement = r.placement or {}
+            is_child = bool(placement.get("parent_id") or placement.get("clip_to_parent"))
+            if not is_child:
+                continue
+            if r.layout_role == "border":
+                continue
+            event_pattern = str(getattr(r, "event_pattern", "") or "")
+            if event_pattern == "none":
+                continue
+            if str(getattr(r, "border_style", "none") or "none") != "none":
+                logger.info(
+                    f"  [{r.region_id}] clearing child texture outline "
+                    f"(border_style={r.border_style} -> none)"
+                )
+                r.border_style = "none"
+                r.border_thickness = 1
 
     def _normalize_shape(self, effect: str, shape: str) -> str:
         """
@@ -905,10 +937,13 @@ class VisualToRealizationConverter:
                 placement["shape"] = "rectangle"
                 placement["mask_shape"] = "rectangle"
 
-        # 如果原始是圆形/椭圆等几何语义，且未显式指定边界，默认绘制外轮廓，以便表现“外围走线”的语义
+        # 如果原始是圆形/椭圆等几何语义，且未显式指定边界，默认绘制外轮廓，以便表现"外围走线"的语义
+        # 但 textured center 区域（wave/lace/honeycomb/relief 等）的纹理本身已定义形状边界，
+        # 额外加轮廓会产生"双层圆环"等视觉冗余，因此跳过。
         try:
             if original_shape_lower in {"circle", "circular", "round", "oval", "ellipse"}:
-                if not params.get("border_style") and border_style == "none":
+                has_texture_effect = vr.visual_effect not in {"plain", "none", "", None}
+                if not has_texture_effect and not params.get("border_style") and border_style == "none":
                     border_style = "back_loop_outline"
                     logger.info(f"  [{vr.region_id}] implicit geometric outline added: border_style=back_loop_outline")
         except Exception:

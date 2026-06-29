@@ -313,7 +313,8 @@ class ActionBuilder:
     def _repair_discrete_border(self, grid: np.ndarray, region: RealizationRegion):
         """Fill one-cell gaps on rasterized geometric outlines."""
         placement = region.placement or {}
-        if get_mask_shape(placement) in {"diamond", "rhombus", "hexagon", "hex"}:
+        mask_shape = get_mask_shape(placement)
+        if mask_shape in {"diamond", "rhombus", "hexagon", "hex"}:
             return
         r0, c0, r1, c1 = self._get_bbox(region)
         border_action = self._b_knit
@@ -345,9 +346,17 @@ class ActionBuilder:
             grid[r, c] = border_action
 
         # Bridge single-cell holes between same-row or same-column border pixels.
+        # For curved shapes (circle/oval/heart/star), skip diagonal bridging:
+        # the midpoint between two diagonal border pixels often falls inside the
+        # shape interior, causing the border to appear artificially thickened
+        # in high-curvature areas (e.g. bottom-right of a circle).
         border_set = set(coords)
+        diagonal_offsets = () if mask_shape in {
+            "circle", "oval", "round", "circular", "ellipse",
+            "heart", "star",
+        } else ((1, 1), (1, -1))
         for r, c in list(border_set):
-            for dr, dc in ((0, 2), (2, 0), (1, 1), (1, -1)):
+            for dr, dc in ((0, 2), (2, 0)) + diagonal_offsets:
                 r2, c2 = r + dr, c + dc
                 mid = (r + dr // 2, c + dc // 2)
                 if (r2, c2) in border_set:
@@ -610,6 +619,9 @@ class ActionBuilder:
     def _restore_border_pixels(self, grid: np.ndarray, realization_plan: RealizationPlan):
         """在所有事件写入和裁剪后，重新绘制所有 border region 的边框轮廓。
         确保过渡求解、spillover 裁剪等不会破坏边框像素。
+        
+        关键修复：不覆盖任何 child texture region 内的像素，避免
+        边框恢复时意外吞掉圆形/多边形内部的纹理事件。
         """
         border_regions = [
             r for r in (realization_plan.regions or [])
@@ -617,6 +629,14 @@ class ActionBuilder:
         ]
         if not border_regions:
             return
+
+        # 收集所有 child texture regions 的掩码信息
+        child_texture_placements = []
+        for r in (realization_plan.regions or []):
+            placement = getattr(r, "placement", {}) or {}
+            if (placement.get("clip_to_parent") or placement.get("parent_id")) and r.layout_role != "border":
+                if has_mask_shape(placement):
+                    child_texture_placements.append(placement)
 
         restored = 0
         for region in border_regions:
@@ -629,6 +649,17 @@ class ActionBuilder:
                     if not self._inside_shape(shape, r, c, region):
                         continue
                     if not self._inside_layer_stack(r, c, region):
+                        continue
+                    # 保护：如果该像素位于任何 child texture region 内，跳过
+                    inside_child = False
+                    for child_placement in child_texture_placements:
+                        try:
+                            if point_in_mask(r, c, child_placement, self.grid_size):
+                                inside_child = True
+                                break
+                        except Exception:
+                            pass
+                    if inside_child:
                         continue
                     if self._is_border(shape, r, c, region, thickness):
                         if grid[r, c] != self._b_knit:

@@ -470,6 +470,35 @@ class PatternPlanEngine:
 
         return PatternPlan(layout_type=layout, motifs=motifs)
 
+    def from_visual_spec_flat(self, spec: VisualSpec) -> PatternPlan:
+        """Create a flat PatternPlan directly from VisualSpec (no hierarchy).
+
+        Used as baseline: each VisualSpec region becomes an independent motif
+        without parent-child relationships or refinement flags.
+        """
+        motifs = []
+        for region in spec.regions:
+            if region.layout_role == "ground":
+                continue
+            motif_type = SHAPE_ALIASES.get(region.visual_shape, region.visual_shape)
+            effect = EFFECT_ALIASES.get(region.visual_effect, region.visual_effect)
+            motifs.append(PatternMotif(
+                motif_id=region.region_id,
+                motif_type=motif_type,
+                effect=effect,
+                region=dict(region.placement),
+                params=dict(region.params),
+                role=region.layout_role,
+                symmetry="none",
+                allow_refinement=False,
+                parent_id=None,
+            ))
+        return PatternPlan(
+            layout_type=spec.layout_type,
+            motifs=motifs,
+            history=[{"source": "flat_visual_spec_baseline"}],
+        )
+
     def render_visual_spec(self, plan: PatternPlan) -> VisualSpec:
         regions = [VisualRegion(
             region_id="ground",
