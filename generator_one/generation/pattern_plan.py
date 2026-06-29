@@ -820,7 +820,9 @@ class PatternPlanEngine:
 
     def _data_to_plan(self, data: Dict[str, Any], current_plan: Optional[PatternPlan]) -> Optional[PatternPlan]:
         if "motifs" in data:
-            return PatternPlan.from_dict(data)
+            plan = PatternPlan.from_dict(data)
+            self._validate_motif_effect_compatibility(plan)
+            return plan
 
         if "operation" in data:
             plan = copy.deepcopy(current_plan) if current_plan is not None else PatternPlan()
@@ -831,6 +833,32 @@ class PatternPlanEngine:
             return self._visual_spec_data_to_plan(data)
 
         return None
+
+    def _validate_motif_effect_compatibility(self, plan: PatternPlan) -> None:
+        """检查并修正 motif_type 与 effect 的不兼容组合。
+        当 LLM 输出形状类 motif_type（如 stripe）但 effect="plain" 时，
+        自动映射到合适的纹理 effect，避免渲染出无纹理的空白区域。
+        """
+        _SHAPE_TO_EFFECT = {
+            "stripe": "rib",
+            "column": "rib",
+            "wave": "wave_tuck",
+            "zigzag": "wave_tuck",
+            "chevron": "wave_tuck",
+        }
+        for motif in plan.motifs:
+            if motif.effect != "plain":
+                continue
+            if motif.role in {"border", "ground", "allover"}:
+                continue
+            mt = str(motif.motif_type or "").lower()
+            if mt in _SHAPE_TO_EFFECT:
+                corrected = _SHAPE_TO_EFFECT[mt]
+                logger.warning(
+                    f"  [{motif.motif_id}] motif_type='{mt}' + effect='plain' "
+                    f"→ 自动修正 effect='{corrected}'"
+                )
+                motif.effect = corrected
 
     def _visual_spec_data_to_plan(self, data: Dict[str, Any]) -> PatternPlan:
         motifs = []
@@ -1505,6 +1533,22 @@ class PatternPlanEngine:
                     repeat["clip_to_parent"] = True
                 return repeat
             return {"type": "full"}
+        # ring 类型：转换为外圈形状 + 内圈排除
+        if placement.get("type") == "ring":
+            outer_shape = str(placement.get("shape", "circle")).lower()
+            outer_center = placement.get("outer_center", placement.get("center", [20, 20]))
+            outer_size = placement.get("outer_size", 38)
+            inner_center = placement.get("inner_center", [20, 20])
+            inner_size = placement.get("inner_size", 16)
+            placement["center"] = outer_center
+            placement["size"] = outer_size
+            placement["shape"] = outer_shape
+            placement["mask_shape"] = outer_shape
+            placement["inner_exclude"] = {
+                "center": inner_center,
+                "size": inner_size,
+                "shape": outer_shape,
+            }
         placement.setdefault("center", [20, 20])
         placement.setdefault("size", 16)
         placement.setdefault("shape", self._motif_to_visual_shape(motif.motif_type))

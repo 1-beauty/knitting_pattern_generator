@@ -60,10 +60,10 @@ _EFFECT_TO_REALIZATION = {
     ("reverse", "panel"):   ("plain_back", "none", "none"),
 
     # cable / 麻花
-    # 闭合几何里的 cable 不能用孤立 transfer 点冒充。没有连续骨架实现时只保留轮廓。
-    ("cable", "diamond"):   ("plain_front", "back_loop_outline", "none"),
-    ("cable", "circle"):    ("plain_front", "back_loop_outline", "none"),
-    ("cable", "panel"):     ("plain_front", "back_loop_outline", "none"),
+    # 闭合几何里的 cable 使用 column_xfer 柱状麻花模式，通过掩码裁剪到形状内部
+    ("cable", "diamond"):   ("plain_front", "back_loop_outline", "column_xfer"),
+    ("cable", "circle"):    ("plain_front", "back_loop_outline", "column_xfer"),
+    ("cable", "panel"):     ("plain_front", "back_loop_outline", "column_xfer"),
     ("cable", "column"):    ("plain_front", "back_loop_outline", "column_xfer"),
     ("cable", "stripe"):    ("plain_front", "back_loop_outline", "column_xfer"),  # 横条也可用列麻花
 

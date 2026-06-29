@@ -1,0 +1,90 @@
+{
+  "schema_version": "pattern_plan/v1",
+  "canvas": {
+    "width": 40,
+    "height": 40
+  },
+  "layout_type": "framed",
+  "motifs": [
+    {
+      "motif_id": "frame_1",
+      "motif_type": "frame",
+      "effect": "plain",
+      "region": {
+        "top_left": [
+          8,
+          8
+        ],
+        "bottom_right": [
+          32,
+          32
+        ],
+        "center": [
+          20,
+          20
+        ],
+        "size": 16
+      },
+      "params": {
+        "border_thickness": 2
+      },
+      "role": "border",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    },
+    {
+      "motif_id": "fill_1",
+      "motif_type": "stripe",
+      "effect": "plain",
+      "region": {
+        "top_left": [
+          10,
+          10
+        ],
+        "bottom_right": [
+          30,
+          30
+        ],
+        "center": [
+          20,
+          20
+        ],
+        "size": 16,
+        "shape": "frame"
+      },
+      "params": {
+        "period_x": 4,
+        "direction": "vertical"
+      },
+      "role": "center",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": "frame_1"
+    },
+    {
+      "motif_id": "bg_1",
+      "motif_type": "panel",
+      "effect": "wave_tuck",
+      "region": {
+        "type": "full"
+      },
+      "params": {
+        "period_x": 5,
+        "period_y": 4,
+        "split_col_offset": 2,
+        "tuck_col_offset": 3
+      },
+      "role": "allover",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    }
+  ],
+  "history": [
+    {
+      "input": "矩形框架内竖条纹填充，框架外波浪吊目背景",
+      "source": "llm"
+    }
+  ]
+}

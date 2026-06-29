@@ -1,0 +1,90 @@
+{
+  "schema_version": "pattern_plan/v1",
+  "canvas": {
+    "width": 40,
+    "height": 40
+  },
+  "layout_type": "framed",
+  "motifs": [
+    {
+      "motif_id": "inner_circle",
+      "motif_type": "circle",
+      "effect": "honeycomb",
+      "region": {
+        "center": [
+          20,
+          20
+        ],
+        "size": 18,
+        "shape": "circle"
+      },
+      "params": {
+        "period_x": 4,
+        "period_y": 3,
+        "stagger": true
+      },
+      "role": "center",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    },
+    {
+      "motif_id": "frame_border",
+      "motif_type": "frame",
+      "effect": "plain",
+      "region": {
+        "center": [
+          20,
+          20
+        ],
+        "size": 20
+      },
+      "params": {
+        "border_thickness": 2
+      },
+      "role": "border",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    },
+    {
+      "motif_id": "fill_mesh",
+      "motif_type": "circle",
+      "effect": "lace",
+      "region": {
+        "type": "ring",
+        "inner_center": [
+          20,
+          20
+        ],
+        "inner_size": 18,
+        "outer_center": [
+          20,
+          20
+        ],
+        "outer_size": 38,
+        "shape": "circle",
+        "center": [
+          20,
+          20
+        ],
+        "size": 16
+      },
+      "params": {
+        "period_x": 3,
+        "period_y": 3,
+        "stagger": true
+      },
+      "role": "center",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": "inner_circle"
+    }
+  ],
+  "history": [
+    {
+      "input": "大圆居中内蜂巢，外层矩形边框，边框与圆形之间网眼填充",
+      "source": "llm"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "summary": {
+    "safe_action_kinds": 2,
+    "requires_confirmation_action_kinds": 0,
+    "unmapped_action_kinds": 0,
+    "requires_confirmation_cell_count": 0,
+    "unmapped_cell_count": 0,
+    "note": "机器 BMP 使用恒强机器色表颜色；requires_confirmation 动作需要打版师确认宏参数、度目或速度后再上机。"
+  },
+  "mapped_actions": [
+    {
+      "abbr": "f_knit",
+      "count": 1352,
+      "internal_color": "#FF0010",
+      "export_color": "#800000",
+      "machine_export_safe": true,
+      "machine_export_requires_confirmation": false,
+      "machine_action_id": 1,
+      "machine_action_name": "前床编织（有翻针动作）"
+    },
+    {
+      "abbr": "b_knit",
+      "count": 248,
+      "internal_color": "#2BCE48",
+      "export_color": "#008000",
+      "machine_export_safe": true,
+      "machine_export_requires_confirmation": false,
+      "machine_action_id": 2,
+      "machine_action_name": "后床编织（有翻针动作）"
+    }
+  ],
+  "requires_confirmation_actions": [],
+  "unmapped_actions": []
+}

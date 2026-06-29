@@ -313,6 +313,13 @@ class KnittingPipeline:
         if not affected_regions:
             return clipped, {"clipped_actions": 0}
 
+        # 收集 allover/ground 区域，它们的特殊动作不应被裁剪
+        allover_regions = [
+            r for r in regions
+            if getattr(r, "layout_role", "") in {"allover", "ground"}
+            or (getattr(r, "placement", {}) or {}).get("type") in {"full", "repeat"}
+        ]
+
         child_actions = (
             actions.transfer_ids()
             | actions.split_ids()
@@ -335,6 +342,18 @@ class KnittingPipeline:
                 )
                 if inside_any_child:
                     continue
+                # allover/ground 区域的特殊动作也应保留（背景纹理）
+                inside_allover = False
+                for ar in allover_regions:
+                    ap = getattr(ar, "placement", {}) or {}
+                    if ap.get("type") in {"full"}:
+                        inside_allover = True
+                        break
+                    if has_mask_shape(ap) and point_in_mask(r, c, ap, rows):
+                        inside_allover = True
+                        break
+                if inside_allover:
+                    continue
                 clipped[r, c] = actions.DEFAULT_BG
                 removed += 1
 
@@ -349,6 +368,11 @@ class KnittingPipeline:
             r for r in regions
             if (getattr(r, "placement", {}) or {}).get("clip_to_parent")
             or (getattr(r, "placement", {}) or {}).get("parent_id")
+        ]
+        allover_regions = [
+            r for r in regions
+            if getattr(r, "layout_role", "") in {"allover", "ground"}
+            or (getattr(r, "placement", {}) or {}).get("type") in {"full", "repeat"}
         ]
         texture_actions = (
             actions.transfer_ids()
@@ -366,6 +390,15 @@ class KnittingPipeline:
                     continue
                 total += 1
                 if any(layer_mask_contains(r, c, region, regions_by_id, rows) for region in affected_regions):
+                    continue
+                # 也检查 allover 区域
+                inside_allover = any(
+                    (getattr(ar, "placement", {}) or {}).get("type") == "full"
+                    or (has_mask_shape(getattr(ar, "placement", {}) or {})
+                        and point_in_mask(r, c, getattr(ar, "placement", {}), rows))
+                    for ar in allover_regions
+                )
+                if inside_allover:
                     continue
                 outside += 1
         stats = {"texture_actions": total, "texture_actions_outside_child_layers": outside}
