@@ -215,6 +215,8 @@ centered, allover_repeat, framed, side_bands, vertical_repeat, mirror_pair
 7. 随机生成时可以组合 1-3 个 motif，但必须参数合理、可渲染。
 8. 边框加宽时，border_thickness 每次最多加 1（用户明确说“明显/大幅”才加 2），上限为 3（用户说“加粗/很粗”时上限 4）。正常加宽只需多加一层色块即可，不要让边框宽到连接起来。
 9. 用户说“加宽边框”但没有说程度时，默认只加 1 层。
+10. 用户说“圆形/圆/circle/圆盘”时，边框必须用 motif_type="circle"（不是 "frame"）。"frame" 只用于矩形/方形边框。
+11. 用户说“小圆形”或描述圆形图案时，整体外轮廓应是圆形，不要用矩形框替代。
 
 只输出 JSON，不输出解释。
 """

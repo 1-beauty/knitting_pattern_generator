@@ -7,15 +7,15 @@
   "layout_type": "centered",
   "motifs": [
     {
-      "motif_id": "circle_border",
-      "motif_type": "circle",
+      "motif_id": "frame_1",
+      "motif_type": "frame",
       "effect": "plain",
       "region": {
         "center": [
           20,
           20
         ],
-        "size": 18
+        "size": 12
       },
       "params": {
         "border_thickness": 1
@@ -34,7 +34,7 @@
           20,
           20
         ],
-        "size": 14,
+        "size": 10,
         "shape": "circle"
       },
       "params": {

@@ -3,14 +3,14 @@
     "safe_action_kinds": 3,
     "requires_confirmation_action_kinds": 1,
     "unmapped_action_kinds": 0,
-    "requires_confirmation_cell_count": 54,
+    "requires_confirmation_cell_count": 18,
     "unmapped_cell_count": 0,
     "note": "机器 BMP 使用恒强机器色表颜色；requires_confirmation 动作需要打版师确认宏参数、度目或速度后再上机。"
   },
   "mapped_actions": [
     {
       "abbr": "f_knit",
-      "count": 1246,
+      "count": 1467,
       "internal_color": "#FF0010",
       "export_color": "#800000",
       "machine_export_safe": true,
@@ -20,7 +20,7 @@
     },
     {
       "abbr": "b_knit",
-      "count": 246,
+      "count": 97,
       "internal_color": "#2BCE48",
       "export_color": "#008000",
       "machine_export_safe": true,
@@ -30,7 +30,7 @@
     },
     {
       "abbr": "f_tuck",
-      "count": 54,
+      "count": 18,
       "internal_color": "#00A4FF",
       "export_color": "#000080",
       "machine_export_safe": true,
@@ -42,7 +42,7 @@
   "requires_confirmation_actions": [
     {
       "abbr": "f_split",
-      "count": 54,
+      "count": 18,
       "internal_color": "#FFE606",
       "export_color": "#C71C03",
       "machine_export_safe": true,

@@ -8,15 +8,15 @@
     "layout_type": "centered",
     "motifs": [
       {
-        "motif_id": "circle_border",
-        "motif_type": "circle",
+        "motif_id": "frame_1",
+        "motif_type": "frame",
         "effect": "plain",
         "region": {
           "center": [
             20,
             20
           ],
-          "size": 18
+          "size": 12
         },
         "params": {
           "border_thickness": 1
@@ -35,7 +35,7 @@
             20,
             20
           ],
-          "size": 14,
+          "size": 10,
           "shape": "circle"
         },
         "params": {
@@ -60,7 +60,7 @@
   },
   "layout_type": "centered",
   "num_regions": 3,
-  "total_events": 108,
+  "total_events": 36,
   "layer_clip": {
     "clipped_actions": 0
   },
@@ -91,7 +91,7 @@
     "clipped_actions": 0
   },
   "layer_clip_audit": {
-    "texture_actions": 108,
+    "texture_actions": 36,
     "texture_actions_outside_child_layers": 0
   },
   "canvas_margin": {
@@ -103,10 +103,10 @@
     "removed_unpaired_honeycomb_cells": 0
   },
   "distribution": {
-    "f_knit": 1246,
-    "b_knit": 246,
-    "f_tuck": 54,
-    "f_split": 54
+    "f_knit": 1467,
+    "b_knit": 97,
+    "f_tuck": 18,
+    "f_split": 18
   },
-  "tension_score": 0.2076923076923077
+  "tension_score": 0.06923076923076923
 }
