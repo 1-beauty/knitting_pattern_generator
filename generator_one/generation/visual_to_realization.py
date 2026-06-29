@@ -68,19 +68,21 @@ _EFFECT_TO_REALIZATION = {
     ("cable", "stripe"):    ("plain_front", "back_loop_outline", "column_xfer"),  # 横条也可用列麻花
 
     # wave_tuck / 波浪集圈
+    # 纹理效果不默认带轮廓：轮廓决策延迟到 _resolve_border_styles 后处理，
+    # 该阶段拥有完整层级上下文，可区分 standalone 与 child texture。
     ("wave_tuck", "panel"):     ("plain_front", "none", "diagonal_wave"),
-    ("wave_tuck", "rectangle"): ("plain_front", "back_loop_outline", "diagonal_wave"),
+    ("wave_tuck", "rectangle"): ("plain_front", "none", "diagonal_wave"),
     ("wave_tuck", "allover"):   ("plain_front", "none", "diagonal_wave"),
-    ("wave_tuck", "diamond"):   ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "triangle"):  ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "hexagon"):   ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "polygon"):   ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "circle"):    ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "heart"):     ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "star"):      ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "chevron"):   ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "zigzag"):    ("plain_front", "back_loop_outline", "diagonal_wave"),
-    ("wave_tuck", "cross"):     ("plain_front", "back_loop_outline", "diagonal_wave"),
+    ("wave_tuck", "diamond"):   ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "triangle"):  ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "hexagon"):   ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "polygon"):   ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "circle"):    ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "heart"):     ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "star"):      ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "chevron"):   ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "zigzag"):    ("plain_front", "none", "diagonal_wave"),
+    ("wave_tuck", "cross"):     ("plain_front", "none", "diagonal_wave"),
     ("wave_tuck", "wave"):      ("plain_front", "none", "diagonal_wave"),
     ("wave_tuck", "stripe"):    ("plain_front", "none", "diagonal_wave"),  # 条纹内波浪
     ("wave_tuck", "column"):    ("plain_front", "none", "diagonal_wave"),  # 柱状内波浪
@@ -96,62 +98,62 @@ _EFFECT_TO_REALIZATION = {
 
     # lace / 网眼
     ("lace", "panel"):      ("plain_front", "none", "lattice_miss"),
-    ("lace", "rectangle"):  ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "circle"):     ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "diamond"):    ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "triangle"):   ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "hexagon"):    ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "polygon"):    ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "heart"):      ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "star"):       ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "chevron"):    ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "zigzag"):     ("plain_front", "back_loop_outline", "lattice_miss"),
-    ("lace", "cross"):      ("plain_front", "back_loop_outline", "lattice_miss"),
+    ("lace", "rectangle"):  ("plain_front", "none", "lattice_miss"),
+    ("lace", "circle"):     ("plain_front", "none", "lattice_miss"),
+    ("lace", "diamond"):    ("plain_front", "none", "lattice_miss"),
+    ("lace", "triangle"):   ("plain_front", "none", "lattice_miss"),
+    ("lace", "hexagon"):    ("plain_front", "none", "lattice_miss"),
+    ("lace", "polygon"):    ("plain_front", "none", "lattice_miss"),
+    ("lace", "heart"):      ("plain_front", "none", "lattice_miss"),
+    ("lace", "star"):       ("plain_front", "none", "lattice_miss"),
+    ("lace", "chevron"):    ("plain_front", "none", "lattice_miss"),
+    ("lace", "zigzag"):     ("plain_front", "none", "lattice_miss"),
+    ("lace", "cross"):      ("plain_front", "none", "lattice_miss"),
     ("lace", "mesh"):       ("plain_front", "none", "lattice_miss"),
 
     # relief / 浮雕
     ("relief", "panel"):    ("plain_front", "none", "staggered_tuck"),
-    ("relief", "diamond"):  ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "triangle"): ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "hexagon"):  ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "polygon"):  ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "circle"):   ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "heart"):    ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "star"):     ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "chevron"):   ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "zigzag"):    ("plain_front", "back_loop_outline", "staggered_tuck"),
-    ("relief", "cross"):     ("plain_front", "back_loop_outline", "staggered_tuck"),
+    ("relief", "diamond"):  ("plain_front", "none", "staggered_tuck"),
+    ("relief", "triangle"): ("plain_front", "none", "staggered_tuck"),
+    ("relief", "hexagon"):  ("plain_front", "none", "staggered_tuck"),
+    ("relief", "polygon"):  ("plain_front", "none", "staggered_tuck"),
+    ("relief", "circle"):   ("plain_front", "none", "staggered_tuck"),
+    ("relief", "heart"):    ("plain_front", "none", "staggered_tuck"),
+    ("relief", "star"):     ("plain_front", "none", "staggered_tuck"),
+    ("relief", "chevron"):   ("plain_front", "none", "staggered_tuck"),
+    ("relief", "zigzag"):    ("plain_front", "none", "staggered_tuck"),
+    ("relief", "cross"):     ("plain_front", "none", "staggered_tuck"),
     ("relief", "allover"):  ("plain_front", "none", "staggered_tuck"),
 
     # honeycomb / 蜂巢
     ("honeycomb", "panel"):     ("plain_front", "none", "honeycomb_tuck"),
-    ("honeycomb", "diamond"):   ("plain_front", "back_loop_outline", "honeycomb_tuck"),
-    ("honeycomb", "triangle"):  ("plain_front", "back_loop_outline", "honeycomb_tuck"),
+    ("honeycomb", "diamond"):   ("plain_front", "none", "honeycomb_tuck"),
+    ("honeycomb", "triangle"):  ("plain_front", "none", "honeycomb_tuck"),
     # Closed geometric honeycomb marks are easy to misread as broken wave
     # cells on the color map. Keep the shape clean; allover honeycomb still
     # uses the tuck texture below.
-    ("honeycomb", "hexagon"):   ("plain_front", "back_loop_outline", "none"),
-    ("honeycomb", "polygon"):   ("plain_front", "back_loop_outline", "honeycomb_tuck"),
-    ("honeycomb", "circle"):    ("plain_front", "back_loop_outline", "honeycomb_tuck"),
-    ("honeycomb", "heart"):     ("plain_front", "back_loop_outline", "honeycomb_tuck"),
-    ("honeycomb", "star"):      ("plain_front", "back_loop_outline", "honeycomb_tuck"),
-    ("honeycomb", "chevron"):    ("plain_front", "back_loop_outline", "honeycomb_tuck"),
-    ("honeycomb", "zigzag"):     ("plain_front", "back_loop_outline", "honeycomb_tuck"),
-    ("honeycomb", "cross"):      ("plain_front", "back_loop_outline", "honeycomb_tuck"),
+    ("honeycomb", "hexagon"):   ("plain_front", "none", "none"),
+    ("honeycomb", "polygon"):   ("plain_front", "none", "honeycomb_tuck"),
+    ("honeycomb", "circle"):    ("plain_front", "none", "honeycomb_tuck"),
+    ("honeycomb", "heart"):     ("plain_front", "none", "honeycomb_tuck"),
+    ("honeycomb", "star"):      ("plain_front", "none", "honeycomb_tuck"),
+    ("honeycomb", "chevron"):    ("plain_front", "none", "honeycomb_tuck"),
+    ("honeycomb", "zigzag"):     ("plain_front", "none", "honeycomb_tuck"),
+    ("honeycomb", "cross"):      ("plain_front", "none", "honeycomb_tuck"),
     ("honeycomb", "allover"):   ("plain_front", "none", "honeycomb_tuck"),
 
     # seed / 种子针
     ("seed", "panel"):      ("plain_front", "none", "seed_tuck"),
-    ("seed", "diamond"):    ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "triangle"):   ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "hexagon"):    ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "polygon"):    ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "circle"):     ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "heart"):      ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "star"):       ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "chevron"):     ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "zigzag"):      ("plain_front", "back_loop_outline", "seed_tuck"),
-    ("seed", "cross"):       ("plain_front", "back_loop_outline", "seed_tuck"),
+    ("seed", "diamond"):    ("plain_front", "none", "seed_tuck"),
+    ("seed", "triangle"):   ("plain_front", "none", "seed_tuck"),
+    ("seed", "hexagon"):    ("plain_front", "none", "seed_tuck"),
+    ("seed", "polygon"):    ("plain_front", "none", "seed_tuck"),
+    ("seed", "circle"):     ("plain_front", "none", "seed_tuck"),
+    ("seed", "heart"):      ("plain_front", "none", "seed_tuck"),
+    ("seed", "star"):       ("plain_front", "none", "seed_tuck"),
+    ("seed", "chevron"):     ("plain_front", "none", "seed_tuck"),
+    ("seed", "zigzag"):      ("plain_front", "none", "seed_tuck"),
+    ("seed", "cross"):       ("plain_front", "none", "seed_tuck"),
     ("seed", "allover"):    ("plain_front", "none", "seed_tuck"),
 }
 
@@ -299,13 +301,11 @@ class VisualToRealizationConverter:
             # 不阻塞主流程
             logger.debug("  nested region alignment failed, continuing")
 
-        # 关键修复：对齐完成后，清除 child texture 区域的轮廓。
-        # _align_nested_regions 会设置 parent_id/clip_to_parent，此时才能
-        # 准确识别 child texture。如果不消除轮廓，会出现"双层圆环"等问题。
+        # 轮廓决策：在父子层级建立后，统一决定 border_style
         try:
-            self._clear_child_texture_outlines(plan)
+            self._resolve_border_styles(plan)
         except Exception:
-            logger.debug("  child texture outline clearing failed, continuing")
+            logger.debug("  border style resolution failed, continuing")
 
         try:
             self._protect_child_textures_from_parent(plan)
@@ -544,29 +544,49 @@ class VisualToRealizationConverter:
             placement.pop("_requested_size", None)
             r.placement = placement
 
-    def _clear_child_texture_outlines(self, plan: RealizationPlan):
-        """在 _align_nested_regions 设置 parent_id 之后，清除 child texture 的轮廓。
+    def _resolve_border_styles(self, plan: RealizationPlan):
+        """统一的轮廓决策后处理。
 
-        当 border region 作为父级、纹理 region 作为子级时，子级的轮廓
-        会产生"双层圆环"等视觉冗余。纹理本身已定义形状边界，不需要额外轮廓。
+        在 _align_nested_regions 建立完整父子层级后，统一决定每个区域的
+        border_style。替代之前散落在查找表、_convert_region 内的分散逻辑。
+
+        规则：
+        1. ground/allover/side_band → 不加轮廓
+        2. border 角色 → 保持已有值
+        3. 查找表或用户已设置 border_style != "none" → 保持
+        4. standalone 几何形状 (无父级) → 加 back_loop_outline
+        5. child (有父级) → 不加轮廓（纹理本身定义形状边界）
         """
         for r in getattr(plan, "regions", []) or []:
-            placement = r.placement or {}
-            is_child = bool(placement.get("parent_id") or placement.get("clip_to_parent"))
-            if not is_child:
+            if r.layout_role in {"ground", "allover", "side_band"}:
                 continue
             if r.layout_role == "border":
                 continue
-            event_pattern = str(getattr(r, "event_pattern", "") or "")
-            if event_pattern == "none":
+
+            current_border = str(getattr(r, "border_style", "none") or "none").lower()
+            if current_border != "none":
+                # 查找表或用户已设置了轮廓（plain/reverse/cable/显式覆盖），保持
                 continue
-            if str(getattr(r, "border_style", "none") or "none") != "none":
-                logger.info(
-                    f"  [{r.region_id}] clearing child texture outline "
-                    f"(border_style={r.border_style} -> none)"
-                )
-                r.border_style = "none"
-                r.border_thickness = 1
+
+            # 检查是否是几何形状
+            placement = r.placement or {}
+            shape = str(placement.get("mask_shape", placement.get("shape", "")) or "").lower()
+            if shape not in _GEOMETRIC_SHAPES:
+                continue
+
+            # 检查是否是 child (parent_id/clip_to_parent 已由 _align_nested_regions 设置)
+            is_child = bool(placement.get("parent_id") or placement.get("clip_to_parent"))
+            if is_child:
+                # child 不加轮廓：纹理本身定义形状边界，
+                # 父级 border 已提供外部轮廓
+                continue
+
+            # standalone 几何形状：加轮廓
+            r.border_style = "back_loop_outline"
+            logger.info(
+                f"  [{r.region_id}] _resolve_border_styles: "
+                f"standalone {shape} -> back_loop_outline"
+            )
 
     def _normalize_shape(self, effect: str, shape: str) -> str:
         """
@@ -937,17 +957,8 @@ class VisualToRealizationConverter:
                 placement["shape"] = "rectangle"
                 placement["mask_shape"] = "rectangle"
 
-        # 如果原始是圆形/椭圆等几何语义，且未显式指定边界，默认绘制外轮廓，以便表现"外围走线"的语义
-        # 但 textured center 区域（wave/lace/honeycomb/relief 等）的纹理本身已定义形状边界，
-        # 额外加轮廓会产生"双层圆环"等视觉冗余，因此跳过。
-        try:
-            if original_shape_lower in {"circle", "circular", "round", "oval", "ellipse"}:
-                has_texture_effect = vr.visual_effect not in {"plain", "none", "", None}
-                if not has_texture_effect and not params.get("border_style") and border_style == "none":
-                    border_style = "back_loop_outline"
-                    logger.info(f"  [{vr.region_id}] implicit geometric outline added: border_style=back_loop_outline")
-        except Exception:
-            pass
+        # 轮廓决策已移至 _resolve_border_styles 后处理，此处不再做隐式轮廓设置
+        # （旧代码为 textured/plain circle 加 back_loop_outline，现已由统一后处理负责）
 
         # side_band 区域特殊处理
         # 不再无条件禁止 side_band 事件。根据 placement/params 中的 width/size 决定是否允许事件，
@@ -996,10 +1007,8 @@ class VisualToRealizationConverter:
         if "transition_policy" in params:
             transition_policy = str(params.get("transition_policy") or transition_policy)
 
-        is_child_texture = bool(placement.get("parent_id") or placement.get("clip_to_parent")) and vr.layout_role != "border"
-        if is_child_texture and event_pattern != "none":
-            border_style = "none"
-            border_thickness = 1
+        # 轮廓决策已统一在 _resolve_border_styles 后处理中，不再在 _convert_region 内做 child texture 判断
+        # （旧代码因 parent_id 尚未设置，is_child_texture 永远为 False，是死代码）
 
         # 波浪方向与密度参数（可由上游显式传入）
         if vr.visual_effect == "wave_tuck":
