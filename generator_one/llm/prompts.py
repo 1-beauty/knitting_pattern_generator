@@ -52,9 +52,17 @@ wave       波浪
 column     柱状
 stripe     条纹
 panel      矩形面板
-frame      边框
+frame      矩形边框（仅用于矩形/方形，不要用于圆形）
 mesh       网格形
 circle     圆形
+triangle   三角形
+hexagon    六边形/六角形
+polygon    多边形
+heart      心形/爱心
+star       星形/星星
+chevron    人字形/V形
+zigzag     锯齿形/折线
+cross      十字形
 allover    满地
 
 ## visual_effect 合法值（仿真图视觉效果）
@@ -197,7 +205,10 @@ PATTERN_PLAN_SYSTEM_PROMPT = """将针织图案需求转换为可编辑 PatternP
 }
 
 ## motif_type 合法值
-panel, diamond, wave, mesh, frame, stripe, column, circle, allover
+panel, diamond, wave, mesh, frame, stripe, column, circle, allover,
+triangle, hexagon, polygon, heart, star, chevron, zigzag, cross
+
+注意：frame 只用于矩形/方形边框。用户说圆形边框时用 circle，说三角形边框时用 triangle，以此类推。
 
 ## effect 合法值
 plain, reverse, cable, wave_tuck, rib, links, lace, relief, honeycomb, seed
@@ -217,6 +228,8 @@ centered, allover_repeat, framed, side_bands, vertical_repeat, mirror_pair
 9. 用户说“加宽边框”但没有说程度时，默认只加 1 层。
 10. 用户说“圆形/圆/circle/圆盘”时，边框必须用 motif_type="circle"（不是 "frame"）。"frame" 只用于矩形/方形边框。
 11. 用户说“小圆形”或描述圆形图案时，整体外轮廓应是圆形，不要用矩形框替代。
+12. 形状关键词映射：用户说“三角/triangle”→ motif_type="triangle"；“六边/六角/hexagon”→ "hexagon"；“心形/爱心/heart”→ "heart"；“星形/星星/star”→ "star"；“锯齿/zigzag”→ "zigzag"；“十字/cross”→ "cross"；“人字/chevron/V形”→ "chevron"；“多边形/polygon”→ "polygon"。不要把这些形状替换为 panel 或 diamond。
+13. 用户描述的形状就是 motif_type，不要用 frame 或 panel 替代几何形状（circle/triangle/hexagon/heart/star 等）。
 
 只输出 JSON，不输出解释。
 """
