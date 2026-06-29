@@ -938,22 +938,17 @@ class VisualToRealizationConverter:
 
         # 边框角色优先保证外轮廓可见，不让标准化把 frame/rectangle 吃掉
         if vr.layout_role == "border":
+            # 所有边框形状统一应用尺寸安全限制
+            try:
+                placement["size"] = min(int(placement.get("size", 17)), 17)
+            except Exception:
+                placement["size"] = 17
+            if border_thickness < 1:
+                border_thickness = 1
+            placement.setdefault("center", [20, 20])
+
             if original_shape_lower in {"frame", "border", "rect", "rectangle", "square", "box"}:
                 border_style = "back_loop_outline"
-                # 尊重 pattern plan 中指定的 border_thickness，不强制覆盖
-                # 原代码 border_thickness = max(border_thickness, 2) 会强制最小 2
-                # 但现在 pattern plan 层已经通过 _clamp_border_thickness 控制厚度
-                # 这里只需确保不为 0 即可
-                if border_thickness < 1:
-                    border_thickness = 1
-                placement["center"] = [20, 20]
-                # 边框尺寸安全限制：40x40 画布上，边框 size 最大 17
-                # 这确保边框不会太接近画布边缘（至少留 3 行边距）
-                # 原代码 min(size, 17) 是必要的，不能移除
-                try:
-                    placement["size"] = min(int(placement.get("size", 17)), 17)
-                except Exception:
-                    placement["size"] = 17
                 placement["shape"] = "rectangle"
                 placement["mask_shape"] = "rectangle"
 

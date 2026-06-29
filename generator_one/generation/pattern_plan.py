@@ -1512,10 +1512,11 @@ class PatternPlanEngine:
             placement["parent_id"] = motif.parent_id
             placement["clip_to_parent"] = True
         if motif.motif_type == "frame":
-            explicit_shape = placement.get("shape") or placement.get("mask_shape")
-            if explicit_shape:
-                placement["shape"] = self._motif_to_visual_shape(explicit_shape)
-                placement["mask_shape"] = placement["shape"]
+            # 优先使用 region 中用户/LLM显式指定的形状（如 circle, diamond）
+            region_shape = str(motif.region.get("shape", "")).lower()
+            if region_shape and region_shape not in {"frame", "border", "rectangle", "rect", "square", "box", ""}:
+                placement["shape"] = region_shape
+                placement["mask_shape"] = region_shape
             else:
                 placement["mask_shape"] = "rectangle"
                 placement["shape"] = "rectangle"
@@ -1526,7 +1527,6 @@ class PatternPlanEngine:
         mapping = {
             "eyelet": "mesh",
             "lace": "mesh",
-            "border": "frame",
             "rect": "rectangle",
             "square": "rectangle",
         }
