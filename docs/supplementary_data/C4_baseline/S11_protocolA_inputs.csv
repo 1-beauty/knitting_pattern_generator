@@ -1,0 +1,11 @@
+编号,测试输入
+Baseline Case 01,圆形结构，内部波浪吊目，外部矩形边框，背景稀疏网眼
+Baseline Case 02,矩形边框包裹圆形，圆形内部为稀疏蜂巢吊目
+Baseline Case 03,矩形边框包裹中心圆形，圆形内部为波浪吊目，背景为平针
+Baseline Case 04,菱形主体，内部蜂巢纹理，背景平针
+Baseline Case 05,六边形结构，内部波浪吊目，背景稀疏网眼
+Baseline Case 06,三角形区域，内部镂空蕾丝，背景平针
+Baseline Case 07,心形图案居中，内部浮雕凸起，背景稀疏网眼
+Baseline Case 08,菱形内部绞花麻花，背景蜂巢纹理
+Baseline Case 09,矩形框架，内部竖条纹填充，边框罗纹
+Baseline Case 10,双菱形并排，左菱形内蜂巢，右菱形内波浪，背景平针

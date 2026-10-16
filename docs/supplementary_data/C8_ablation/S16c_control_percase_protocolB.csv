@@ -1,0 +1,47 @@
+Case,Texture motif,Region IoU (Plan-Grid / Ours),Leakage (Plan-Grid / Ours),Grouping completeness (Plan-Grid / Ours),V_h (Plan-Grid / +Repair / Ours) V_h
+Ablation Case 01,wave_1,0.406 / 0.452,0.000 / 0.000,1.000 / 1.000,0 / 0 / 0
+Ablation Case 02,inner_wave,0.750 / 0.679,0.000 / 0.000,0.982 / 1.000,0 / 0 / 0
+Ablation Case 03,circle_center,0.279 / 0.460,0.200 / 0.111,—,1 / 0 / 0
+Ablation Case 03,fill_mesh,0.038 / 0.167,0.667 / 0.000,—,—
+Ablation Case 04,inner,0.698 / 0.726,0.000 / 0.050,0.973 / 1.000,0 / 0 / 0
+Ablation Case 05,diamond_main,0.003 / 0.106,1.000 / 0.863,—,0 / 0 / 0
+Ablation Case 06,fill_stripe,0.126 / 0.048,0.714 / 0.833,0.857 / 1.000,0 / 0 / 0
+Ablation Case 07,inner_wave,0.307 / 0.349,0.214 / 0.306,0.952 / 1.000,1 / 1 / 0
+Ablation Case 08,triangle_1,0.173 / 0.228,0.000 / 0.000,—,0 / 0 / 0
+Mean,—,0.309 / 0.357,0.311 / 0.240,0.953 / 1.000,0.25 / 0.13 / 0
+Nested Expand Case 01,tex_core,0.518 / 0.360,0.000 / 0.000,0.800 / 1.000,0 / — / 0
+Nested Expand Case 02,tex_core,0.635 / 0.517,0.000 / 0.000,0.880 / 1.000,0 / — / 0
+Nested Expand Case 03,tex_core,0.565 / 0.565,0.000 / 0.000,1.000 / 1.000,0 / — / 0
+Nested Expand Case 04,tex_core,0.518 / 0.360,0.000 / 0.000,0.800 / 1.000,0 / — / 0
+Nested Expand Case 05,tex_core,0.504 / 0.452,0.000 / 0.000,0.952 / 1.000,0 / — / 0
+Nested Expand Case 06,tex_core,0.649 / 0.649,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 07,tex_core,0.462 / 0.462,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 08,tex_core,0.688 / 0.688,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 09,tex_core,0.649 / 0.649,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 10,tex_core,0.392 / 0.348,0.000 / 0.000,0.857 / 1.000,0 / — / 0
+Nested Expand Case 11,tex_core,0.563 / 0.496,0.000 / 0.000,0.889 / 1.000,0 / — / 0
+Nested Expand Case 12,tex_core,0.514 / 0.450,0.000 / 0.000,0.923 / 1.000,0 / — / 0
+Nested Expand Case 13,tex_core,0.392 / 0.348,0.000 / 0.000,0.857 / 1.000,0 / — / 0
+Nested Expand Case 14,tex_core,0.477 / 0.401,0.000 / 0.000,0.933 / 1.000,0 / — / 0
+Nested Expand Case 15,tex_core,0.534 / 0.534,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 16,tex_core,0.403 / 0.403,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 17,tex_core,0.584 / 0.584,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 18,tex_core,0.534 / 0.534,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 19,tex_core,0.479 / 0.391,0.000 / 0.000,0.923 / 1.000,0 / — / 0
+Nested Expand Case 20,tex_core,0.603 / 0.565,0.000 / 0.000,0.970 / 1.000,0 / — / 0
+Nested Expand Case 21,tex_core,0.494 / 0.443,0.000 / 0.000,0.952 / 1.000,0 / — / 0
+Nested Expand Case 22,tex_core,0.479 / 0.391,0.000 / 0.000,0.923 / 1.000,0 / — / 0
+Nested Expand Case 23,tex_core,0.501 / 0.377,0.000 / 0.000,0.846 / 1.000,0 / — / 0
+Nested Expand Case 24,tex_core,0.534 / 0.534,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 25,tex_core,0.443 / 0.443,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 26,tex_core,0.548 / 0.548,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 27,tex_core,0.534 / 0.534,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 28,tex_core,0.612 / 0.252,0.000 / 0.000,1.000 / 1.000,0 / — / 0
+Nested Expand Case 29,tex_core,0.803 / 0.424,0.000 / 0.000,1.000 / 1.000,0 / — / 0
+Nested Expand Case 30,tex_core,0.571 / 0.462,0.000 / 0.000,1.000 / 1.000,0 / — / 0
+Nested Expand Case 31,tex_core,0.612 / 0.252,0.000 / 0.000,1.000 / 1.000,0 / — / 0
+Nested Expand Case 32,tex_core,0.624 / 0.424,0.000 / 0.000,0.800 / 1.000,0 / — / 0
+Nested Expand Case 33,tex_core,0.624 / 0.542,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 34,tex_core,0.521 / 0.424,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 35,tex_core,0.643 / 0.568,0.000 / 0.000,— / —,0 / — / 0
+Nested Expand Case 36,tex_core,0.624 / 0.542,0.000 / 0.000,— / —,0 / — / 0

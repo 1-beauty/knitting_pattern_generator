@@ -56,7 +56,8 @@ outputs/
 *.bmp
 
 # ---- 论文相关材料 (Paper / submission) ----
-docs/
+# 注：用 docs/* 而非 docs/，否则无法对目录内文件做例外反选
+docs/*
 .qoder/
 scientific_image_skill_runs/
 scripts/_*
@@ -85,3 +86,9 @@ Desktop.ini
 
 # ---- Logs ----
 *.log
+
+# =================================================================
+# 例外：补充材料需要上传（必须放在最后，才能覆盖上面的 docs/* 与 *.docx）
+# =================================================================
+!docs/Supplementary_Material.docx
+!docs/supplementary_data/

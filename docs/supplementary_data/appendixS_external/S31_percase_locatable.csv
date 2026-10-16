@@ -1,0 +1,14 @@
+Method (quantizer),Case,Per-case values,What it evidences
+SD3-medium (Q1),sem_30,"miss 1405 / carrier 195 (1600 cells full, zero loop); V_h=V_c=0; true-knit 0; F=0.0",Main-table 0.033 knittable is a degenerate pseudo-knittable output (§5-③)
+SD3-medium (Q2),sem_03,miss 1230 / carrier 370,Q2 lift remains miss+carrier only (§4)
+SD3-medium (Q2),sem_04,miss 1318 / carrier 282,
+SD3-medium (Q2),sem_09,miss 1471 / carrier 129,
+SD3-medium (Q2),sem_11,miss 1399 / carrier 201,
+SDXL-Turbo (Q2),sem_02,miss 470 / carrier 1130,
+SDXL-Turbo (Q2),sem_04,miss 442 / carrier 1158,
+SDXL-Turbo (Q2),sem_16,miss 468 / carrier 1132,
+VAR-d16 (Q2),sem_05,miss 925 / carrier 675,
+VAR-d16 (Q2),sem_06,miss 842 / carrier 758,
+VAR-d16 (Q2),sem_11,miss 75 / carrier 1525,
+VAR-d16 (Q2),sem_23,miss 1321 / carrier 279,
+PixArt-Σ (Q1),sem_08,f_knit 62 (the only loop pixels among all 30 cases); V_h 1294,Even the fabric substrate fails to hold (§6.4)

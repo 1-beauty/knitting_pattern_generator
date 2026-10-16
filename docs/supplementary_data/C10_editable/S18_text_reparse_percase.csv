@@ -1,0 +1,7 @@
+案例,编辑维度,V_h,V_c,（格） ∥R∥,编辑影响率,非目标保持率,主要变化
+Description-Edit Case 00,基准,0,0,—,—,—,圆形内波浪吊目
+Description-Edit Case 01,纹理替换,0,0,797,0.095,1.000,波浪替换为蜂巢
+Description-Edit Case 02,纹理替换,0,0,797,0.159,1.000,波浪替换为镂空网眼
+Description-Edit Case 03,边框加粗,0,0,969,0.208,1.000,边框区域扩大
+Description-Edit Case 04,背景替换,0,0,1600*,—*,—*,背景加入稀疏网眼
+Description-Edit Case 05,形状替换,0,0,797,0.193,1.000,中心圆形替换为菱形

@@ -1,0 +1,6 @@
+Method,Mean distance to nearest action color,Share of pixels within distance < 30
+SDXL-Turbo,56.2,8.3%
+SD3-medium,57.0,18.3%
+SD v1.5,58.1,14.5%
+VAR-d16,63.4,11.3%
+PixArt-Σ,75.1,7.9%

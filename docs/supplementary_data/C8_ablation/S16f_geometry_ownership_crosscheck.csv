@@ -1,0 +1,11 @@
+案例,motif（纹理）,IoU（几何）,IoU（内部）,泄漏（几何）,泄漏（内部）
+Ablation Case 01,wave_1（wave_tuck）,0.452,0.341,0.000,0.000
+Ablation Case 02,inner_wave（wave_tuck）,0.679,0.679,0.000,0.000
+Ablation Case 03,circle_center（honeycomb）,0.460,0.278,0.111,0.000
+Ablation Case 03,fill_mesh（lace）,0.167,0.174,0.000,0.778
+Ablation Case 04,inner（wave_tuck）,0.726,0.660,0.050,0.000
+Ablation Case 05,diamond_main（cable）,0.106,0.270,0.863,0.000
+Ablation Case 06,fill_stripe（rib）,0.048,0.000,0.833,—
+Ablation Case 07,inner_wave（wave_tuck）,0.349,0.198,0.306,0.000
+Ablation Case 08,triangle_1（lace）,0.228,0.173,0.000,0.000
+均值,—,0.357,0.308,0.240,0.097

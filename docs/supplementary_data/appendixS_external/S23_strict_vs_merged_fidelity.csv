@@ -1,0 +1,9 @@
+Method,Tier,Fidelity (strict),Fidelity (merged),Δ
+LLM-Direct,B,0.716,0.754,+0.037
+Ours,–,0.633,0.620,−0.013
+VAR-d16,A,0.063,0.397,+0.333
+PixArt-Σ,A,0.008,0.349,+0.342
+SD3-medium,A,0.085,0.323,+0.238
+SD v1.5,B,0.000,0.314,+0.314
+SDXL-Turbo,B,0.000,0.253,+0.253
+Random Valid Map,B,0.071,0.071,+0.000

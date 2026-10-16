@@ -1,0 +1,11 @@
+案例,纹理 motif（父级）,有效作用域格数,归属格数,Region IoU,泄漏率,父子包含率,成组完整率
+Ablation Case 03,circle_center（无父级）,1009,80,0.345,0.125,—,—
+Ablation Case 03,fill_mesh（frame_outer）,24,16,0.429,0.250,1.000,—
+Ablation Case 04,inner（border）,841,72,0.660,0.000,1.000,1.000
+Ablation Case 06,fill_stripe（frame_1）,841,72,0.048,0.833,0.333,1.000
+Nested Case 01,diamond_mid（frame_outer）,477,7,0.021,0.000,1.000,1.000
+Nested Case 01,circle_inner_wave（diamond_mid）,253,16,0.360,0.000,1.000,—
+Nested Case 02,circle_lace（frame_mid）,377,114,0.318,0.526,0.474,1.000
+Nested Case 03,circle_mid_wave（frame_outer）,613,12,0.039,0.000,1.000,1.000
+Nested Case 03,heart_inner_honeycomb（circle_mid_wave）,289,29,0.630,0.000,1.000,—
+均值,—,—,—,0.317,0.193,0.851,1.000

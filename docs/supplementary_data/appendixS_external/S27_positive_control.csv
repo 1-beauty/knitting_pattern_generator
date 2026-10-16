@@ -1,0 +1,5 @@
+Check,Result (n = 30)
+Original Ours color maps lie on the 15 standard palette,30/30 = True
+Direct quantization V_h+V_c,"28 cases = 0; sem_24 = 1, sem_29 = 4"
+Cell-wise reproduction after ±25 RGB perturbation,27 cases = 1.000; sem_16 / sem_25 / sem_30 = 0.999
+V_h+V_c after perturbation,identical to before perturbation (0 / 1 / 4 unchanged)

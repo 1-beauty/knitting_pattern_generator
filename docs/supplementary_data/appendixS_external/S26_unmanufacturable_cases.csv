@@ -1,0 +1,3 @@
+ID,Prompt (zh),V_h,V_c,Fidelity (strict),Attribution
+sem_24,用网眼做背景，中间放个圆形，圆形里织波浪,1,0,0.517,单点硬约束违例（纹理已齐）
+sem_29,三个菱形竖向排列，内部均为网眼，背景平针,4,0,0.000,多形状嵌套 + 纯网眼填充时仅生成 b_split，未生成期望的 f_split/f_tuck → Texture_F=0

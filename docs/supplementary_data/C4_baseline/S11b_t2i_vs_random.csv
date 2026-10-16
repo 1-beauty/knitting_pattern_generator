@@ -1,0 +1,21 @@
+案例,方法,V_h,V_c,T,Type-Coverage↑,TAP↑
+Baseline Case 01,T2I + 颜色量化,779,0,0.849,0.000,0.000
+Baseline Case 02,T2I + 颜色量化,481,0,0.677,0.000,0.000
+Baseline Case 03,T2I + 颜色量化,681,0,0.695,0.000,0.000
+Baseline Case 04,T2I + 颜色量化,745,0,0.779,0.000,0.000
+Baseline Case 05,T2I + 颜色量化,463,0,0.490,0.000,0.000
+Baseline Case 06,T2I + 颜色量化,763,0,0.775,0.000,0.000
+Baseline Case 07,T2I + 颜色量化,644,0,0.680,0.000,0.000
+Baseline Case 08,T2I + 颜色量化,523,0,0.647,0.000,0.000
+Baseline Case 09,T2I + 颜色量化,366,0,0.675,0.500,0.000
+Baseline Case 10,T2I + 颜色量化,212,0,0.536,0.000,0.000
+Baseline Case 01,Random Valid Map,0,0,0.000,0.000,0.000
+Baseline Case 02,Random Valid Map,0,0,0.000,0.000,0.000
+Baseline Case 03,Random Valid Map,0,0,0.000,0.000,0.000
+Baseline Case 04,Random Valid Map,0,0,0.000,0.000,0.000
+Baseline Case 05,Random Valid Map,0,0,0.000,0.000,0.000
+Baseline Case 06,Random Valid Map,0,0,0.000,0.000,0.000
+Baseline Case 07,Random Valid Map,0,0,0.000,0.000,0.000
+Baseline Case 08,Random Valid Map,0,0,0.000,0.000,0.000
+Baseline Case 09,Random Valid Map,0,0,0.000,0.500,0.000
+Baseline Case 10,Random Valid Map,0,0,0.000,0.000,0.000
