@@ -16,7 +16,7 @@ Refinement 编译器 v7.1
 """
 
 import numpy as np
-from typing import Dict, Optional
+from typing import Optional
 from dataclasses import dataclass, field
 
 from core import actions
@@ -179,6 +179,3 @@ class RefinementCompiler:
         logger.info(f"    split_v budget remaining: {stats.budget_remaining}")
 
         return result
-
-    def get_statistics(self) -> Dict:
-        return {}

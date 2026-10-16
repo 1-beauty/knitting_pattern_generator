@@ -1,0 +1,27 @@
+[
+  {
+    "id": "test_06",
+    "prompt": "三角形区域，内部镂空蕾丝，背景平针",
+    "expected_texture": ["f_tuck", "b_tuck"]
+  },
+  {
+    "id": "test_07",
+    "prompt": "心形图案居中，内部浮雕凸起，背景稀疏网眼",
+    "expected_texture": ["f_tuck", "f_split"]
+  },
+  {
+    "id": "test_08",
+    "prompt": "菱形内部绞花麻花，背景蜂巢纹理",
+    "expected_texture": ["xfer_l1", "xfer_r1", "f_tuck", "b_tuck"]
+  },
+  {
+    "id": "test_09",
+    "prompt": "矩形框架，内部竖条纹填充，边框罗纹",
+    "expected_texture": ["f_knit", "b_knit"]
+  },
+  {
+    "id": "test_10",
+    "prompt": "双菱形并排，左菱形内蜂巢，右菱形内波浪，背景平针",
+    "expected_texture": ["f_tuck", "b_tuck", "f_split"]
+  }
+]

@@ -92,7 +92,28 @@ def check_action_grid(grid: np.ndarray) -> List[Violation]:
 
     # ------------------------------------------------------------
     # C1: 精确版 front/back loop 切换检查
+    #
+    # 关键优化：cable 模式通过 transfer 实现床间切换，其边界列的
+    # front/back 交替是合法的。如果某列附近存在 transfer 动作，
+    # 说明该列处于 cable 影响范围内，应豁免 C1 检查。
     # ------------------------------------------------------------
+    
+    # 预计算：收集所有 transfer 所在的列，扩展 ±2 列作为 cable 影响区。
+    # cable 实际影响范围 = transfer列 ± side_offset(通常2) ± b_knit支撑(1)
+    # = center_col ± 3。从 transfer 列扩展 ±2 可覆盖 center_col ± 4，
+    # 已包含全部 cable 影响区并留 1 列余量。
+    _cable_affected_cols: Set[int] = set()
+    if _XFER:
+        for i in range(rows):
+            for j in range(cols):
+                if int(grid[i, j]) in _XFER:
+                    for dj in range(-2, 3):
+                        nj = j + dj
+                        if 0 <= nj < cols:
+                            _cable_affected_cols.add(nj)
+    
+    _B_KNIT = actions.idx_safe("b_knit", default=-1)
+
     def _has_transition_nearby(row: int, col: int) -> bool:
         """
         检查该位置附近是否已有 transfer/split 做过渡
@@ -111,32 +132,50 @@ def check_action_grid(grid: np.ndarray) -> List[Violation]:
                     return True
         return False
 
-    # 对每一列统计“连续切换 streak”
+    def _is_border_b_knit(row: int, col: int) -> bool:
+        """Check if pixel at (row,col) is b_knit.
+        b_knit is only used for intentional geometric borders (back_loop_outline),
+        so ANY b_knit pixel creating a bed switch is a deliberate border transition,
+        not a C1 violation."""
+        return _B_KNIT >= 0 and int(grid[row, col]) == _B_KNIT
+    
+    # 对每一列统计"连续切换 streak"
     col_streak: Dict[int, int] = {}
     col_prev_row: Dict[int, int] = {}
     col_max_streak: Dict[int, int] = {}
     col_max_streak_start: Dict[int, int] = {}
-
+    
     for i in range(rows - 1):
         for j in range(cols):
             curr = int(grid[i, j])
             below = int(grid[i + 1, j])
-
+    
             # 只看 loop 类动作
             if curr not in _LOOP or below not in _LOOP:
                 col_streak[j] = 0
                 continue
-
+    
             bed_curr = actions.bed(curr)
             bed_below = actions.bed(below)
-
+    
             # bed 信息不存在，或相同，不报
             if not bed_curr or not bed_below or bed_curr == bed_below:
                 col_streak[j] = 0
                 continue
-
+    
+            # Cable 影响区内的列：transfer 已经处理了床切换，豁免 C1
+            if j in _cable_affected_cols:
+                col_streak[j] = 0
+                continue
+    
             # 附近已有 split / transfer 过渡，不报
             if _has_transition_nearby(i, j):
+                col_streak[j] = 0
+                continue
+
+            # 几何边框豁免：如果 bed 切换由 b_knit 边框像素引起，
+            # 该切换是预期的（f_knit↔b_knit 是边框轮廓），不报 C1。
+            if _is_border_b_knit(i, j) or _is_border_b_knit(i + 1, j):
                 col_streak[j] = 0
                 continue
 
@@ -309,12 +348,23 @@ def auto_fix_action_grid(
 ) -> np.ndarray:
     """修复动作层工艺违反（保守版）"""
     fixed = grid.copy()
+    rows, cols = fixed.shape
     _f_split = actions.idx_safe("f_split")
-    _b_tuck = actions.idx_safe("b_tuck")
+    _b_knit_idx = actions.idx_safe("b_knit", default=-1)
 
     for v in violations:
         if v.rule == "C1":
-            fixed[v.row, v.col] = _f_split
+            # b_knit pixels are always intentional borders.
+            # Skip f_split insertion if the bed switch involves b_knit.
+            is_border = False
+            if _b_knit_idx >= 0:
+                for di in range(-1, 2):
+                    ri = v.row + di
+                    if 0 <= ri < rows and int(fixed[ri, v.col]) == _b_knit_idx:
+                        is_border = True
+                        break
+            if not is_border:
+                fixed[v.row, v.col] = _f_split
 
         elif v.rule == "C2":
             row_vals = fixed[v.row, :].astype(int)
@@ -335,8 +385,12 @@ def auto_fix_action_grid(
             row_vals = fixed[v.row, :].astype(int)
             bed_cols = [j for j, x in enumerate(row_vals) if x in actions.bed_transfer_ids()]
             if bed_cols:
+                # Use miss (background/air) instead of b_tuck to avoid
+                # introducing visible texture blocks in sparse patterns
+                # like mesh/lace backgrounds.
+                _miss = actions.idx_safe("miss", default=0)
                 mid = bed_cols[len(bed_cols) // 2]
-                fixed[v.row, mid] = _b_tuck
+                fixed[v.row, mid] = _miss
 
     return fixed
 

@@ -84,6 +84,7 @@ class LLMClient:
         model: Optional[str] = None,
         temperature: float = 0.3,
         max_tokens: int = 1024,
+        timeout: Optional[int] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -94,11 +95,13 @@ class LLMClient:
             model:       模型名称，默认使用 default_model
             temperature: 温度，默认 0.3（结构化输出用低温度）
             max_tokens:  最大输出 token 数
+            timeout:     单次请求超时秒数，默认使用客户端配置的 timeout
 
         Returns:
             LLMResponse，调用方直接读 response.content
         """
         model = model or self.default_model
+        request_timeout = timeout or self.timeout
 
         for attempt in range(self.max_attempts):
             try:
@@ -109,6 +112,7 @@ class LLMClient:
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    timeout=request_timeout,
                     **kwargs,
                 )
 

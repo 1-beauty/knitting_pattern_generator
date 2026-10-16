@@ -21,12 +21,11 @@ from generation.mask_utils import point_in_mask, get_mask_shape
 class AestheticPass:
     """仿真感知美化"""
 
-    def apply(self, action_grid: np.ndarray, role_grid=None, realization_plan=None) -> np.ndarray:
+    def apply(self, action_grid: np.ndarray, realization_plan=None) -> np.ndarray:
         result = action_grid.copy()
 
         fixes = {
             "symmetry_fixes": 0,
-            "isolated_fixes": 0,    # 暂时禁用，避免清掉骨架
             "border_smoothing": 0,
         }
 
@@ -37,14 +36,10 @@ class AestheticPass:
         # 仿真时就会变成明显破洞。
         fixes["symmetry_fixes"] = self._fix_crossing_symmetry(result)
 
-        # Pass 2: 孤立特殊动作清理（暂时禁用）
-        # fixes["isolated_fixes"] = self._fix_isolated_actions(result)
+        # Pass 2: 孤立特殊动作清理（已禁用，避免清掉骨架）
+        # 由 compiler_guard 和 wave_pair_guard 在后处理中负责
 
-        # Pass 3: 边界过渡柔化
-        if role_grid is not None:
-            fixes["border_smoothing"] = self._smooth_zone_borders(result, role_grid)
-
-        # Pass 4: 几何边缘微调（无 role_grid 也可执行）
+        # Pass 3: 几何边缘微调
         if realization_plan is not None:
             fixes["border_smoothing"] += self._smooth_geometric_borders(result, realization_plan)
 
@@ -211,64 +206,6 @@ class AestheticPass:
                         right_count -= 1
                         fixes += 1
                         break
-
-        return fixes
-
-    def _fix_isolated_actions(self, grid: np.ndarray) -> int:
-        """清理完全孤立的特殊动作（四邻都是 f_knit 的 transfer/split）"""
-        rows, cols = grid.shape
-        fixes = 0
-        _f_knit = actions.idx("f_knit")
-        _special = actions.split_ids() | actions.miss_ids()
-        for i in range(1, rows - 1):
-            for j in range(1, cols - 1):
-                a = int(grid[i, j])
-                if a not in _special:
-                    continue
-
-                neighbors = [
-                    int(grid[i - 1, j]),
-                    int(grid[i + 1, j]),
-                    int(grid[i, j - 1]),
-                    int(grid[i, j + 1]),
-                ]
-
-                if all(n == _f_knit for n in neighbors):
-                    grid[i, j] = _f_knit
-                    fixes += 1
-
-        return fixes
-
-    def _smooth_zone_borders(self, grid: np.ndarray, role_grid) -> int:
-        """在不同 zone 交界处确保有合适的过渡"""
-        rows, cols = grid.shape
-        fixes = 0
-        _f_split = actions.idx("f_split")
-        _b_knit = actions.idx("b_knit")
-
-        for i in range(rows):
-            for j in range(cols):
-                cell = role_grid[i, j]
-                zone = getattr(cell, "zone_type", "ground")
-
-                if zone != "boundary":
-                    continue
-
-                a = int(grid[i, j])
-
-                # boundary 格如果是 f_knit，且邻居有 cable 区的 transfer
-                has_transfer_neighbor = False
-                for di, dj in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    ni, nj = i + di, j + dj
-                    if 0 <= ni < rows and 0 <= nj < cols:
-                        if int(grid[ni, nj]) in actions.transfer_ids():
-                            has_transfer_neighbor = True
-                            break
-
-                if has_transfer_neighbor and a == actions.idx("f_knit"):
-                    if i % 4 == 0:
-                        grid[i, j] = _f_split
-                        fixes += 1
 
         return fixes
 

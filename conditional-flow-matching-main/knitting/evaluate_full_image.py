@@ -42,6 +42,20 @@ except Exception:
 
 import torch
 
+try:
+    import lpips as lpips_lib
+    HAS_LPIPS = True
+except Exception:
+    HAS_LPIPS = False
+    print("⚠️  lpips 不可用，LPIPS 将跳过 (pip install lpips)")
+
+try:
+    from scipy.ndimage import sobel as scipy_sobel
+    HAS_SCIPY = True
+except Exception:
+    HAS_SCIPY = False
+    print("⚠️  scipy 不可用，Edge/Boundary 指标将跳过")
+
 from knitting.inference import generate_full_image
 
 
@@ -316,6 +330,119 @@ def region_variance_gap(pred_01, gt_01, id_matrix, min_region_size=4, patch_size
 
 
 # ══════════════════════════════════════════════════════════════════
+# 补充感知与纹理指标（更适合 Stage 4 评估）
+# ══════════════════════════════════════════════════════════════════
+
+_lpips_model = None
+
+def _get_lpips_model():
+    global _lpips_model
+    if _lpips_model is None and HAS_LPIPS:
+        _lpips_model = lpips_lib.LPIPS(net='alex')
+        _lpips_model.eval()
+        for p in _lpips_model.parameters():
+            p.requires_grad = False
+    return _lpips_model
+
+
+def compute_lpips(pred_01, gt_01):
+    """LPIPS 感知距离 (AlexNet)。越低表示感知质量越好。"""
+    model = _get_lpips_model()
+    if model is None:
+        return None
+    pred_t = torch.from_numpy(pred_01).permute(2, 0, 1).unsqueeze(0).float() * 2 - 1
+    gt_t   = torch.from_numpy(gt_01).permute(2, 0, 1).unsqueeze(0).float() * 2 - 1
+    with torch.no_grad():
+        return float(model(pred_t, gt_t).item())
+
+
+def compute_edge_consistency(pred_01, gt_01):
+    """边缘一致性：梯度幅值误差 + 梯度方向余弦距离。"""
+    if not HAS_SCIPY:
+        return None
+    pred_g = np.mean(pred_01, axis=2)
+    gt_g   = np.mean(gt_01, axis=2)
+
+    gx_p = scipy_sobel(pred_g, axis=1)
+    gy_p = scipy_sobel(pred_g, axis=0)
+    mag_p = np.sqrt(gx_p**2 + gy_p**2 + 1e-10)
+
+    gx_g = scipy_sobel(gt_g, axis=1)
+    gy_g = scipy_sobel(gt_g, axis=0)
+    mag_g = np.sqrt(gx_g**2 + gy_g**2 + 1e-10)
+
+    grad_err = float(np.mean(np.abs(mag_p - mag_g)))
+    cos_sim  = float(np.mean((gx_p * gx_g + gy_p * gy_g) / (mag_p * mag_g)))
+    return {'edge_grad_err': grad_err, 'edge_cos_sim': cos_sim}
+
+
+def compute_boundary_f1(pred_01, gt_01, id_matrix, patch_size=16, tol=2):
+    """边界 F1：生成图是否捕获了区域边界过渡。"""
+    if not HAS_SCIPY:
+        return None
+    H, W = id_matrix.shape
+    gt_boundary = np.zeros((H * patch_size, W * patch_size), dtype=bool)
+
+    for r in range(H):
+        for c in range(W):
+            if c + 1 < W and id_matrix[r, c] != id_matrix[r, c + 1]:
+                col_px = (c + 1) * patch_size
+                gt_boundary[:, max(0, col_px - tol):min(gt_boundary.shape[1], col_px + tol)] = True
+            if r + 1 < H and id_matrix[r, c] != id_matrix[r + 1, c]:
+                row_px = (r + 1) * patch_size
+                gt_boundary[max(0, row_px - tol):min(gt_boundary.shape[0], row_px + tol), :] = True
+
+    pred_gray = np.mean(pred_01, axis=2)
+    edges = scipy_sobel(pred_gray, axis=0)**2 + scipy_sobel(pred_gray, axis=1)**2
+    thresh = np.percentile(edges[edges > 0], 75) if np.any(edges > 0) else 0
+    pred_boundary = edges > thresh
+
+    tp = int(np.sum(pred_boundary & gt_boundary))
+    fp = int(np.sum(pred_boundary & ~gt_boundary))
+    fn = int(np.sum(~pred_boundary & gt_boundary))
+
+    prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    rec  = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1   = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+    return {'boundary_precision': prec, 'boundary_recall': rec, 'boundary_f1': f1}
+
+
+def compute_texture_spectrum_sim(pred_01, gt_01):
+    """纹理频谱相似度：径向平均功率谱的归一化互相关。"""
+    pred_g = np.mean(pred_01, axis=2).astype(np.float64)
+    gt_g   = np.mean(gt_01, axis=2).astype(np.float64)
+
+    F_p = np.fft.fft2(pred_g - pred_g.mean())
+    F_g = np.fft.fft2(gt_g - gt_g.mean())
+
+    P_p = np.log(np.abs(F_p)**2 + 1e-10)
+    P_g = np.log(np.abs(F_g)**2 + 1e-10)
+
+    H, W = P_p.shape
+    cy, cx = H // 2, W // 2
+    Y, X = np.mgrid[0:H, 0:W]
+    R = np.sqrt((Y - cy)**2 + (X - cx)**2).astype(int)
+    max_r = min(cy, cx)
+
+    spec_p = np.zeros(max_r)
+    spec_g = np.zeros(max_r)
+    counts = np.zeros(max_r)
+    for r in range(max_r):
+        mask = R == r
+        spec_p[r] = P_p[mask].mean()
+        spec_g[r] = P_g[mask].mean()
+        counts[r] = mask.sum()
+
+    valid = counts >= 10
+    if valid.sum() < 5:
+        return None
+    sp, sg = spec_p[valid], spec_g[valid]
+    sp = (sp - sp.mean()) / (sp.std() + 1e-10)
+    sg = (sg - sg.mean()) / (sg.std() + 1e-10)
+    return float(np.mean(sp * sg))
+
+
+# ══════════════════════════════════════════════════════════════════
 # 单个 stage 的 full-image 评估
 # ══════════════════════════════════════════════════════════════════
 
@@ -398,6 +525,26 @@ def evaluate_full_image_stage(
         metrics_sum['RegionOutlier'] += outlier_ratio
         metrics_sum['RegionVarGap']  += var_gap
 
+        # ── perceptual & texture metrics ──────────────────────────
+        if HAS_LPIPS:
+            lpips_v = compute_lpips(pred_01, gt_01)
+            if lpips_v is not None:
+                metrics_sum['LPIPS'] += lpips_v
+
+        if HAS_SCIPY:
+            edge_v = compute_edge_consistency(pred_01, gt_01)
+            if edge_v is not None:
+                metrics_sum['EdgeGradErr']  += edge_v['edge_grad_err']
+                metrics_sum['EdgeCosSim']   += edge_v['edge_cos_sim']
+
+            bnd_v = compute_boundary_f1(pred_01, gt_01, id_mat, patch_size=ps)
+            if bnd_v is not None:
+                metrics_sum['BoundaryF1'] += bnd_v['boundary_f1']
+
+            tex_v = compute_texture_spectrum_sim(pred_01, gt_01)
+            if tex_v is not None:
+                metrics_sum['TextureSim'] += tex_v
+
         n += 1
 
         if idx % 5 == 0:
@@ -474,7 +621,8 @@ def compare_all_full_image_stages(
     # ── 打印表格 ──────────────────────────────────────────────────
     keys = [
         'Full_MSE', 'Full_L1', 'Full_SSIM', 'Full_PSNR',
-        'SeamErr_same', 'SeamErr_diff', 'RegionOutlier', 'RegionVarGap'
+        'SeamErr_same', 'SeamErr_diff', 'RegionOutlier', 'RegionVarGap',
+        'LPIPS', 'EdgeGradErr', 'EdgeCosSim', 'BoundaryF1', 'TextureSim',
     ]
 
     print(f"\n{'='*100}")
@@ -494,6 +642,8 @@ def compare_all_full_image_stages(
             row_data[k] = v
             if 'PSNR' in k:
                 row += f"{v:>14.2f}"
+            elif k in ('BoundaryF1', 'TextureSim', 'EdgeCosSim'):
+                row += f"{v:>14.4f}"
             else:
                 row += f"{v:>14.4f}"
         rows[sname] = row_data

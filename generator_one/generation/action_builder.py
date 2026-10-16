@@ -17,7 +17,10 @@ from typing import List, Tuple
 
 from generation.visual_types import RealizationPlan, RealizationRegion, EventPoint
 from generation.transition_solver import TransitionSolver
-from generation.mask_utils import point_in_mask, get_mask_shape, has_mask_shape
+from generation.mask_utils import (
+    point_in_mask, get_mask_shape, has_mask_shape,
+    resolve_side_band_side, is_excluded_by_foreground,
+)
 from generation.layer_utils import layer_mask_contains, parent_scan_bbox, region_by_id
 from core import actions
 from utils.logger import logger
@@ -63,6 +66,8 @@ class ActionBuilder:
         # Step 2: 写入事件点
         event_counts = {}
         region_map = {r.region_id: r for r in realization_plan.regions}
+        _rejected_by_region = {}
+        _rejection_reasons = {}  # track WHY events are rejected
         for event in events:
             try:
                 r = int(event.row)
@@ -76,8 +81,35 @@ class ActionBuilder:
                 continue
 
             region = region_map.get(event.region_id)
-            if region is not None and not self._event_in_region(r, c, region):
-                continue
+            if region is not None:
+                try:
+                    _in_region = self._event_in_region(r, c, region)
+                except Exception as _exc:
+                    if event.region_id not in _rejection_reasons:
+                        _rejection_reasons[event.region_id] = f"EXCEPTION: {_exc}"
+                    _rejected_by_region[event.region_id] = _rejected_by_region.get(event.region_id, 0) + 1
+                    continue
+                if not _in_region:
+                    _rejected_by_region[event.region_id] = _rejected_by_region.get(event.region_id, 0) + 1
+                    # Log first rejection per region with detailed reason
+                    if event.region_id not in _rejection_reasons:
+                        try:
+                            _rejection_reasons[event.region_id] = self._debug_rejection_reason(r, c, region)
+                        except Exception as _dbg_exc:
+                            _rejection_reasons[event.region_id] = f"DEBUG_EXCEPTION: {_dbg_exc}"
+                    continue
+            elif region is None:
+                if event.region_id not in _rejection_reasons:
+                    _rejection_reasons[event.region_id] = f"REGION_NOT_FOUND in region_map (keys={list(region_map.keys())})"
+
+            # 边框像素保护（纵深防御）: event_planner 已精确排除边框环像素，
+            # 此处作为安全网，防止过渡求解或 LLM repair 引入的新事件覆盖边框。
+            if region is not None and region.border_style != "none":
+                try:
+                    if self._is_on_border_outline(r, c, region):
+                        continue
+                except Exception:
+                    pass
 
             # resolve action index safely
             action_idx = actions.idx_safe(event.action_abbr, default=self._f_knit)
@@ -87,6 +119,18 @@ class ActionBuilder:
             event_counts[event.action_abbr] = event_counts.get(event.action_abbr, 0) + 1
 
         logger.info(f"  action builder: events placed: {event_counts}")
+        if _rejected_by_region:
+            logger.warning(f"  action builder: rejected by _event_in_region: {_rejected_by_region}")
+            for rid, reason in _rejection_reasons.items():
+                _r = region_map.get(rid)
+                _p = getattr(_r, 'placement', {}) or {} if _r else {}
+                logger.warning(
+                    f"    [{rid}] first rejection reason: {reason} | "
+                    f"placement: shape={_p.get('shape','?')} mask={_p.get('mask_shape','?')} "
+                    f"size={_p.get('size','?')} center={_p.get('center','?')} "
+                    f"type={_p.get('type','?')} parent={_p.get('parent_id','none')} "
+                    f"ie={_p.get('inner_exclude','none')}"
+                )
 
         # Step 3: 过渡求解
         # 只对 transition_policy == local_only 的 region 启用
@@ -119,7 +163,231 @@ class ActionBuilder:
         self._restore_border_pixels(grid, realization_plan)
 
         self._regions_by_id = {}
+        # Store rejection info for pipeline diagnostics
+        self._last_rejection_info = {
+            "rejected_by_region": _rejected_by_region,
+            "rejection_reasons": _rejection_reasons,
+            "events_placed": dict(event_counts),
+        }
         return grid
+
+    # ============================================================
+    # Dense 编译（Plan-Grid 基线）
+    # 绕过稀疏事件规划：在区域自身几何 mask 内按周期逐格写入纹理动作。
+    # 与完整方法的差异（刻意保留，用于隔离贡献）：
+    #   - 不成组（无 split/tuck 配对检查、无 cable 支撑针）
+    #   - 不做父级作用域交集 Ω'(z)=Ω(z)∩Ω(parent(z))
+    #   - 不做边框环排除 / edge_fade
+    #   - 不做过渡求解 / transfer 稳定化 / spillover 裁剪 / 边框恢复
+    # ============================================================
+
+    def build_dense(self, realization_plan: RealizationPlan) -> np.ndarray:
+        self._regions_by_id = region_by_id(realization_plan.regions)
+        grid = np.full(
+            (self.grid_size, self.grid_size),
+            self._f_knit,
+            dtype=np.uint8
+        )
+
+        sorted_regions = self._sort_regions(realization_plan.regions)
+
+        # Step 1: 底布 + 边界（与 event 模式共用）
+        for region in sorted_regions:
+            self._fill_base(grid, region)
+            self._draw_border(grid, region)
+
+        # Step 2: 按区域优先级逐格密集写入纹理动作
+        written_counts = {}
+        for region in sorted_regions:
+            n = self._dense_fill_pattern(grid, region)
+            if n:
+                written_counts[region.region_id] = n
+
+        logger.info(f"  action builder[dense]: pattern cells written: {written_counts}")
+        self._regions_by_id = {}
+        self._last_rejection_info = {
+            "rejected_by_region": {},
+            "rejection_reasons": {},
+            "events_placed": dict(written_counts),
+        }
+        return grid
+
+    def _dense_fill_pattern(self, grid: np.ndarray, region: RealizationRegion) -> int:
+        """按 event_pattern 的周期公式在区域 mask 内逐格写入动作，返回写入格数。"""
+        pattern = str(region.event_pattern or "none").lower()
+        if pattern in ("none", ""):
+            return 0
+
+        params = region.event_params or {}
+        placement = region.placement or {}
+        row_min, row_max, col_min, col_max = self._dense_scan_bounds(region)
+
+        center = placement.get("center", [20, 20])
+        try:
+            center_row, center_col = int(center[0]), int(center[1])
+        except Exception:
+            center_row, center_col = 20, 20
+
+        written = 0
+
+        def _put(r: int, c: int, abbr: str):
+            nonlocal written
+            if not self._dense_in_region(r, c, region):
+                return
+            idx = actions.idx_safe(abbr, default=self._f_knit)
+            grid[r, c] = idx if idx is not None else self._f_knit
+            written += 1
+
+        if pattern == "diagonal_wave":
+            period_y = max(1, int(params.get("period_y", 4)))
+            period_x = max(2, int(params.get("period_x", 5)))
+            phase_y = int(params.get("phase_y", 1))
+            split_off = int(params.get("split_col_offset", 2)) % period_x
+            tuck_off = int(params.get("tuck_col_offset", 3)) % period_x
+            if split_off == tuck_off:
+                tuck_off = (split_off + 1) % period_x
+            for r in range(row_min, row_max):
+                if (r - center_row + phase_y) % period_y != 0:
+                    continue
+                for c in range(col_min, col_max):
+                    off = (c - center_col) % period_x
+                    if off == split_off:
+                        _put(r, c, "f_split")
+                    elif off == tuck_off:
+                        _put(r, c, "f_tuck")
+
+        elif pattern in ("honeycomb_tuck", "staggered_tuck"):
+            period_x = max(2, int(params.get("period_x", 4)))
+            period_y = max(2, int(params.get("period_y", 4)))
+            stagger = bool(params.get("stagger", True))
+            for r in range(row_min, row_max):
+                if (r - row_min) % period_y != 1:
+                    continue
+                row_phase = (r - row_min) // period_y
+                s = (period_x // 2) * (row_phase % 2) if stagger else 0
+                for c in range(col_min, col_max):
+                    if (c - col_min + s) % period_x == 0:
+                        _put(r, c, "f_tuck")
+
+        elif pattern == "lattice_miss":
+            period_x = max(2, int(params.get("period_x", 4)))
+            period_y = max(2, int(params.get("period_y", 4)))
+            stagger = bool(params.get("stagger", True))
+            for r in range(row_min, row_max):
+                if (r - row_min) % period_y != 1:
+                    continue
+                row_phase = (r - row_min) // period_y
+                s = (period_x // 2) * (row_phase % 2) if stagger else 0
+                abbr = "xfer_f_b" if (r // period_y) % 2 == 0 else "xfer_b_f"
+                for c in range(col_min, col_max):
+                    if (c - col_min + s) % period_x == 1:
+                        _put(r, c, abbr)
+
+        elif pattern == "seed_tuck":
+            for r in range(row_min, row_max):
+                for c in range(col_min, col_max):
+                    if (r + c) % 2 == 0:
+                        _put(r, c, "b_knit")
+
+        elif pattern == "column_xfer":
+            cable_period = max(1, int(params.get("cable_period", 6)))
+            side_offset = max(1, int(params.get("side_offset", 2)))
+            for r in range(row_min, row_max):
+                if (r - center_row) % cable_period != 0:
+                    continue
+                _put(r, center_col - side_offset, "xfer_l1")
+                _put(r, center_col + side_offset, "xfer_r1")
+
+        else:
+            logger.info(f"  [dense] unsupported event_pattern={pattern}, keep base field only")
+
+        return written
+
+    def _dense_scan_bounds(self, region: RealizationRegion) -> Tuple[int, int, int, int]:
+        """扫描边界（不做父级 bbox 交集，与 event 模式的差异点之一）。"""
+        placement = region.placement or {}
+        role = str(region.layout_role or "center").lower()
+
+        if role in {"ground", "allover"} or placement.get("type") in {"full", "repeat"}:
+            return 0, self.grid_size, 0, self.grid_size
+
+        if role == "side_band":
+            side = resolve_side_band_side(placement, region.region_id, self.grid_size)
+            try:
+                width = int(placement.get("width", placement.get("size", 6)))
+            except Exception:
+                width = 6
+            width = max(1, min(self.grid_size // 2, width))
+            if side == "left":
+                return 0, self.grid_size, 0, width
+            return 0, self.grid_size, self.grid_size - width, self.grid_size
+
+        center = placement.get("center", [20, 20])
+        try:
+            cr, cc = int(center[0]), int(center[1])
+        except Exception:
+            cr, cc = 20, 20
+        try:
+            size = int(placement.get("size", self.grid_size // 3))
+        except Exception:
+            size = self.grid_size // 3
+        return (
+            max(0, cr - size), min(self.grid_size, cr + size + 1),
+            max(0, cc - size), min(self.grid_size, cc + size + 1),
+        )
+
+    def _dense_in_region(self, r: int, c: int, region: RealizationRegion) -> bool:
+        """区域自身几何判定：仅用区域 mask（含 inner_exclude / 前景排除），
+        不做父级作用域交集，不做边框环排除，不做 edge_fade。"""
+        if not (0 <= r < self.grid_size and 0 <= c < self.grid_size):
+            return False
+
+        placement = region.placement or {}
+        role = str(region.layout_role or "center").lower()
+
+        if role == "ground":
+            return not is_excluded_by_foreground(r, c, placement, self.grid_size)
+
+        if is_excluded_by_foreground(r, c, placement, self.grid_size):
+            return False
+
+        if role == "side_band":
+            side = resolve_side_band_side(placement, region.region_id, self.grid_size)
+            try:
+                width = int(placement.get("width", placement.get("size", 6)))
+            except Exception:
+                width = 6
+            width = max(1, min(self.grid_size // 2, width))
+            return c < width if side == "left" else c >= self.grid_size - width
+
+        if (placement.get("type") == "full" or role == "allover") and not has_mask_shape(placement):
+            return True
+
+        if has_mask_shape(placement):
+            try:
+                if not point_in_mask(r, c, placement, self.grid_size):
+                    return False
+                inner_excl = placement.get("inner_exclude")
+                if isinstance(inner_excl, dict) and inner_excl:
+                    try:
+                        if point_in_mask(r, c, inner_excl, self.grid_size):
+                            return False
+                    except Exception:
+                        pass
+                return True
+            except Exception:
+                pass
+
+        center = placement.get("center", [20, 20])
+        try:
+            cr, cc = int(center[0]), int(center[1])
+        except Exception:
+            cr, cc = 20, 20
+        try:
+            size = int(placement.get("size", self.grid_size // 3))
+        except Exception:
+            size = self.grid_size // 3
+        return abs(r - cr) <= size and abs(c - cc) <= size
 
     # ============================================================
     # 区域优先级
@@ -161,6 +429,14 @@ class ActionBuilder:
             for c in range(max(0, c0), min(self.grid_size, c1 + 1)):
                 if self._is_excluded_by_foreground(r, c, region.placement or {}):
                     continue
+                # inner_exclude：跳过内圈排除区域（ring / difference 类型）
+                inner_excl = (region.placement or {}).get("inner_exclude")
+                if isinstance(inner_excl, dict) and inner_excl:
+                    try:
+                        if point_in_mask(r, c, inner_excl, self.grid_size):
+                            continue
+                    except Exception:
+                        pass
                 if self._inside_shape(shape, r, c, region):
                     if not self._inside_layer_stack(r, c, region):
                         continue
@@ -492,6 +768,15 @@ class ActionBuilder:
         if self._is_excluded_by_foreground(r, c, placement):
             return False
 
+        # inner_exclude：ring / difference 类型的事件不应落入内圈区域
+        inner_excl = placement.get("inner_exclude")
+        if isinstance(inner_excl, dict) and inner_excl:
+            try:
+                if point_in_mask(r, c, inner_excl, self.grid_size):
+                    return False
+            except Exception:
+                pass
+
         if role == "side_band":
             side = self._resolve_side_band_side(region)
             try:
@@ -508,7 +793,6 @@ class ActionBuilder:
 
         cr, cc, size = self._get_center_size(region)
         # 如果 region 指定了 mask（mask_shape/shape 或者更多参数），使用通用掩码检测
-        placement = region.placement or {}
         if has_mask_shape(placement):
             try:
                 return point_in_mask(r, c, placement, self.grid_size)
@@ -518,40 +802,61 @@ class ActionBuilder:
         return (abs(r - cr) <= size) and (abs(c - cc) <= size)
 
     def _is_excluded_by_foreground(self, r: int, c: int, placement: dict) -> bool:
-        masks = placement.get("exclude_masks") if isinstance(placement, dict) else None
-        if not masks:
-            return False
-        for item in masks:
-            if not isinstance(item, dict):
-                continue
-            mask = dict(item.get("placement") or {})
-            if not mask:
-                continue
-            try:
-                if has_mask_shape(mask) and point_in_mask(r, c, mask, self.grid_size):
-                    return True
-                if not has_mask_shape(mask):
-                    cr, cc, size = self._get_center_size(
-                        RealizationRegion(
-                            region_id=str(item.get("region_id", "exclude")),
-                            layout_role="center",
-                            placement=mask,
-                            base_field="plain_front",
-                            border_style="none",
-                            border_thickness=1,
-                            event_pattern="none",
-                            event_params={},
-                            transition_policy="none",
-                        )
-                    )
-                    if abs(r - cr) <= size and abs(c - cc) <= size:
-                        return True
-            except Exception:
-                continue
-        return False
+        return is_excluded_by_foreground(r, c, placement, self.grid_size)
 
     def _inside_layer_stack(self, r: int, c: int, region: RealizationRegion) -> bool:
         return layer_mask_contains(r, c, region, self._regions_by_id, self.grid_size)
+
+    def _debug_rejection_reason(self, r: int, c: int, region: RealizationRegion) -> str:
+        """Return a human-readable reason why (r,c) was rejected for region."""
+        placement = region.placement or {}
+        role = str(region.layout_role or "center").lower()
+        # 1) layer stack
+        if not self._inside_layer_stack(r, c, region):
+            # drill down: which parent fails?
+            current = region
+            chain = []
+            seen = set()
+            while current is not None:
+                rid = str(getattr(current, "region_id", ""))
+                if rid in seen:
+                    break
+                seen.add(rid)
+                p = getattr(current, "placement", {}) or {}
+                cur_role = str(getattr(current, "layout_role", "center") or "center").lower()
+                ok = True
+                if (cur_role not in {"ground", "side_band"}
+                        and p.get("type") != "full"
+                        and has_mask_shape(p)):
+                    try:
+                        if not point_in_mask(r, c, p, self.grid_size):
+                            ok = False
+                    except Exception:
+                        ok = False
+                chain.append(f"{rid}(shape={p.get('shape','?')},size={p.get('size','?')},ok={ok})")
+                parent_id = p.get("parent_id")
+                current = self._regions_by_id.get(str(parent_id)) if parent_id else None
+            return f"layer_stack_fail: chain=[{' -> '.join(chain)}]"
+        # 2) exclude masks
+        if self._is_excluded_by_foreground(r, c, placement):
+            return "excluded_by_foreground"
+        # 3) inner_exclude
+        inner_excl = placement.get("inner_exclude")
+        if isinstance(inner_excl, dict) and inner_excl:
+            try:
+                if point_in_mask(r, c, inner_excl, self.grid_size):
+                    return f"inner_exclude(ie_size={inner_excl.get('size','?')})"
+            except Exception:
+                pass
+        # 4) mask shape
+        if has_mask_shape(placement):
+            try:
+                if not point_in_mask(r, c, placement, self.grid_size):
+                    cr, cc, size = self._get_center_size(region)
+                    return f"mask_shape_fail(shape={placement.get('shape','?')},size={size},center=({cr},{cc}),pt=({r},{c}))"
+            except Exception as e:
+                return f"mask_shape_exception: {e}"
+        return "unknown"
 
     def _clip_child_region_spillovers(self, grid: np.ndarray, realization_plan: RealizationPlan) -> int:
         regions = getattr(realization_plan, "regions", []) or []
@@ -570,7 +875,7 @@ class ActionBuilder:
             placement = getattr(region, "placement", {}) or {}
             if placement.get("clip_to_parent") or placement.get("parent_id"):
                 child_regions.append(region)
-            if region.layout_role == "border" and region.border_style != "none":
+            if region.border_style != "none":
                 border_regions.append(region)
 
         if not child_regions:
@@ -589,6 +894,17 @@ class ActionBuilder:
                     if int(grid[r, c]) not in special:
                         continue
                     if self._event_in_region(r, c, region):
+                        continue
+                    # 兄弟区域保护：如果该像素属于另一个 child region，
+                    # 不裁剪（避免大 bbox 的 ring 区域误删兄弟圆形内的事件）
+                    _belongs_to_sibling = False
+                    for _sib in child_regions:
+                        if _sib.region_id == region.region_id:
+                            continue
+                        if self._event_in_region(r, c, _sib):
+                            _belongs_to_sibling = True
+                            break
+                    if _belongs_to_sibling:
                         continue
                     # 保护边框像素：如果该像素属于任何 border region 的边框环，
                     # 恢复为 b_knit 而不是 f_knit
@@ -617,32 +933,52 @@ class ActionBuilder:
         return self._is_border(shape, r, c, border_region, thickness)
 
     def _restore_border_pixels(self, grid: np.ndarray, realization_plan: RealizationPlan):
-        """在所有事件写入和裁剪后，重新绘制所有 border region 的边框轮廓。
+        """在所有事件写入和裁剪后，重新绘制所有带边框的区域的轮廓。
         确保过渡求解、spillover 裁剪等不会破坏边框像素。
+        
+        覆盖范围：所有 border_style != "none" 的区域（不限于 layout_role=="border"），
+        因为 center 角色的几何形状（三角形、圆形等）同样需要边框恢复。
         
         关键修复：不覆盖任何 child texture region 内的像素，避免
         边框恢复时意外吞掉圆形/多边形内部的纹理事件。
         """
         border_regions = [
             r for r in (realization_plan.regions or [])
-            if r.layout_role == "border" and r.border_style != "none"
+            if r.border_style != "none"
         ]
         if not border_regions:
             return
-
-        # 收集所有 child texture regions 的掩码信息
-        child_texture_placements = []
-        for r in (realization_plan.regions or []):
-            placement = getattr(r, "placement", {}) or {}
-            if (placement.get("clip_to_parent") or placement.get("parent_id")) and r.layout_role != "border":
-                if has_mask_shape(placement):
-                    child_texture_placements.append(placement)
 
         restored = 0
         for region in border_regions:
             shape = self._get_shape(region)
             thickness = region.border_thickness
             r0, c0, r1, c1 = self._get_bbox(region)
+
+            # 收集 child texture regions（排除覆盖整个边框区域的 child）
+            # 如果 child 的 mask 完全包含 border 区域的 bbox，说明 child 覆盖了
+            # 整个边框，保护它等于阻止所有边框恢复，这不合理
+            child_texture_placements = []
+            for r_other in (realization_plan.regions or []):
+                if r_other.region_id == region.region_id:
+                    continue  # 跳过自身
+                placement = getattr(r_other, "placement", {}) or {}
+                if (placement.get("clip_to_parent") or placement.get("parent_id")) and r_other.layout_role != "border":
+                    if has_mask_shape(placement):
+                        # 检查 child 是否完全包含 border 区域的 bbox
+                        try:
+                            _c_center = placement.get("center", [20, 20])
+                            _c_size = int(placement.get("size", 0))
+                            _cr, _cc = int(_c_center[0]), int(_c_center[1])
+                            _child_fully_contains = (
+                                _cr - _c_size <= r0 and _cc - _c_size <= c0 and
+                                _cr + _c_size >= r1 and _cc + _c_size >= c1
+                            )
+                        except Exception:
+                            _child_fully_contains = False
+                        if _child_fully_contains:
+                            continue  # child 覆盖整个边框，不保护
+                        child_texture_placements.append(placement)
 
             for r in range(max(0, r0), min(self.grid_size, r1 + 1)):
                 for c in range(max(0, c0), min(self.grid_size, c1 + 1)):
@@ -671,22 +1007,6 @@ class ActionBuilder:
 
 
     def _resolve_side_band_side(self, region: RealizationRegion) -> str:
-        placement = region.placement or {}
-        side_raw = str(placement.get("side", "")).strip().lower()
-        if side_raw in {"left", "right"}:
-            return side_raw
-
-        rid = str(region.region_id or "").lower()
-        if any(k in rid for k in ["right", "r_", "_r", "右"]):
-            return "right"
-        if any(k in rid for k in ["left", "l_", "_l", "左"]):
-            return "left"
-
-        center = placement.get("center")
-        if isinstance(center, (list, tuple)) and len(center) >= 2:
-            try:
-                return "right" if int(center[1]) >= self.grid_size // 2 else "left"
-            except Exception:
-                pass
-
-        return "left"
+        return resolve_side_band_side(
+            region.placement or {}, region.region_id, self.grid_size,
+        )

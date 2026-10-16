@@ -25,18 +25,78 @@ def has_mask_shape(placement: dict) -> bool:
     return bool(get_mask_shape(placement))
 
 
-def _get_center_size_from_placement(placement: dict, grid_size: int) -> Tuple[int,int,int]:
+def get_center_size(placement: dict, grid_size: int) -> Tuple[int, int, int]:
+    """Extract (center_row, center_col, size) from a placement dict.
+
+    Shared utility used by event_planner, action_builder, and layer_utils.
+    """
     placement = placement or {}
-    center = placement.get("center", [grid_size//2, grid_size//2])
+    if placement.get("type") == "full":
+        return grid_size // 2, grid_size // 2, grid_size // 2
+    center = placement.get("center", [grid_size // 2, grid_size // 2])
     try:
-        cr = int(center[0]); cc = int(center[1])
+        cr, cc = int(center[0]), int(center[1])
     except Exception:
-        cr, cc = grid_size//2, grid_size//2
+        cr, cc = grid_size // 2, grid_size // 2
     try:
-        size = int(placement.get("size", grid_size//3))
+        size = int(placement.get("size", grid_size // 3))
     except Exception:
-        size = grid_size//3
+        size = grid_size // 3
     return cr, cc, size
+
+
+def resolve_side_band_side(placement: dict, region_id: str, grid_size: int) -> str:
+    """Determine whether a side_band region is on the 'left' or 'right'.
+
+    Shared utility used by visual_to_realization, event_planner, action_builder.
+    """
+    placement = placement or {}
+    side_raw = str(placement.get("side", "")).strip().lower()
+    if side_raw in {"left", "right"}:
+        return side_raw
+
+    rid = str(region_id or "").lower()
+    if any(k in rid for k in ["right", "r_", "_r", "\u53f3"]):
+        return "right"
+    if any(k in rid for k in ["left", "l_", "_l", "\u5de6"]):
+        return "left"
+
+    center = placement.get("center")
+    if isinstance(center, (list, tuple)) and len(center) >= 2:
+        try:
+            return "right" if int(center[1]) >= grid_size // 2 else "left"
+        except Exception:
+            pass
+
+    return "left"
+
+
+def is_excluded_by_foreground(
+    r: int, c: int, placement: dict, grid_size: int,
+) -> bool:
+    """Check if point (r,c) falls inside any foreground exclusion mask.
+
+    Shared utility used by event_planner, action_builder, and pipeline.
+    """
+    masks = placement.get("exclude_masks") if isinstance(placement, dict) else None
+    if not masks:
+        return False
+    for item in masks:
+        if not isinstance(item, dict):
+            continue
+        mask = dict(item.get("placement") or {})
+        if not mask:
+            continue
+        try:
+            if has_mask_shape(mask) and point_in_mask(r, c, mask, grid_size):
+                return True
+            if not has_mask_shape(mask):
+                cr, cc, size = get_center_size(mask, grid_size)
+                if abs(r - cr) <= size and abs(c - cc) <= size:
+                    return True
+        except Exception:
+            continue
+    return False
 
 
 def point_in_mask(r: int, c: int, placement: dict, grid_size: int) -> bool:
@@ -59,7 +119,7 @@ def point_in_mask(r: int, c: int, placement: dict, grid_size: int) -> bool:
     if placement.get("repeat"):
         return _point_in_repeated_mask(r, c, placement, grid_size)
 
-    cr, cc, size = _get_center_size_from_placement(placement, grid_size)
+    cr, cc, size = get_center_size(placement, grid_size)
 
     # Grid diamond: use Manhattan distance so all four vertices connect cleanly
     # on discrete knitting grids.

@@ -1,0 +1,43 @@
+{
+  "schema_version": "pattern_plan/v1",
+  "canvas": { "width": 40, "height": 40 },
+  "layout_type": "framed",
+  "motifs": [
+    {
+      "motif_id": "frame_outer",
+      "motif_type": "frame",
+      "effect": "plain",
+      "region": { "type": "border", "margin": 1, "center": [20, 20], "size": 18 },
+      "params": { "border_thickness": 2 },
+      "role": "border",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    },
+    {
+      "motif_id": "hex_mid_wave",
+      "motif_type": "polygon",
+      "effect": "wave_tuck",
+      "region": { "center": [20, 20], "size": 16, "shape": "hexagon" },
+      "params": { "period_x": 5, "period_y": 4, "split_col_offset": 2, "tuck_col_offset": 3 },
+      "role": "center",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": "frame_outer"
+    },
+    {
+      "motif_id": "diamond_inner_seed",
+      "motif_type": "diamond",
+      "effect": "seed",
+      "region": { "center": [20, 20], "size": 8, "shape": "diamond" },
+      "params": {},
+      "role": "center",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": "hex_mid_wave"
+    }
+  ],
+  "history": [
+    { "input": "NEST-03 三层嵌套：外框→六边形波浪吊目→内菱形种子针（中层为成组纹理且被内层挖空，手工构造 fixed plan）", "source": "manual_edit" }
+  ]
+}

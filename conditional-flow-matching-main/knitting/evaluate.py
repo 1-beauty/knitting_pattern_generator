@@ -63,24 +63,57 @@ def compute_psnr(pred, target):
     return psnr.mean().item()
 
 
+def _detect_patch_size(stage, ckpt):
+    """Detect patch_size from checkpoint weights.
+    Priority: explicit field > cond_to_spatial weight shape > input_blocks count."""
+    # 1. Checkpoint 显式保存了 patch_size（新版本训练）
+    if 'patch_size' in ckpt:
+        return int(ckpt['patch_size'])
+
+    state = ckpt['model_state']
+
+    # 2. Stage 2/3/4: cond_to_spatial.weight 形状为 [embed_dim, ps*ps]
+    if 'cond_to_spatial.0.weight' in state:
+        ps_sq = state['cond_to_spatial.0.weight'].shape[1]
+        return int(ps_sq ** 0.5)
+
+    # 3. Stage 1: UNet input_blocks 数量取决于 patch_size
+    #    patch_size=16 → 9 blocks, patch_size=8 → 7 blocks
+    n_blocks = len({k.split('.')[2] for k in state
+                    if k.startswith('unet.input_blocks.')})
+    if n_blocks >= 9:
+        return 16
+    if n_blocks >= 7:
+        return 8
+    return 16  # 安全默认值
+
+
 def load_model(stage, ckpt_path, device, json_path='assets/instructions.json'):
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
 
+    # 从 checkpoint 推断 patch_size（不依赖 h5，避免模型/数据不一致）
+    patch_size = _detect_patch_size(stage, ckpt)
+    print(f"  [Model] patch_size={patch_size} (auto-detected)")
+
     if stage == 1:
         from knitting.train import Stage1ConditionedUNet
-        model = Stage1ConditionedUNet(num_classes=15)
+        model = Stage1ConditionedUNet(num_classes=15, patch_size=patch_size)
     elif stage == 2:
         from knitting.train import Stage2NeighborAwareUNet
-        model = Stage2NeighborAwareUNet(num_classes=15, embed_dim=256, num_heads=8)
+        model = Stage2NeighborAwareUNet(
+            num_classes=15, embed_dim=256, num_heads=8, patch_size=patch_size
+        )
     elif stage == 3:
         from knitting.train import Stage3PhysicsAwareUNet
         model = Stage3PhysicsAwareUNet(
-            json_path=json_path, num_classes=15, embed_dim=256, num_heads=8
+            json_path=json_path, num_classes=15, embed_dim=256, num_heads=8,
+            patch_size=patch_size,
         )
     elif stage == 4:
         from knitting.train import Stage4AdaptiveSIUNet
         model = Stage4AdaptiveSIUNet(
-            json_path=json_path, num_classes=15, embed_dim=256, num_heads=8
+            json_path=json_path, num_classes=15, embed_dim=256, num_heads=8,
+            patch_size=patch_size,
         )
     else:
         raise ValueError(f"未知 stage: {stage}")
@@ -92,7 +125,7 @@ def load_model(stage, ckpt_path, device, json_path='assets/instructions.json'):
     val_loss = ckpt.get('val_loss', None)
     print(f"  ✅ Stage {stage} 加载完成: epoch={epoch}"
           + (f", val_loss={val_loss:.4f}" if val_loss else ""))
-    return model
+    return model, patch_size
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -126,7 +159,20 @@ def evaluate_stage(
     print(f"ODE 步数:   {n_steps}")
     print(f"{'='*55}")
 
-    model = load_model(stage, ckpt_path, device, json_path)
+    # 从 h5 文件读取 patch_size（与训练数据一致）
+    import h5py
+    with h5py.File(h5_path, 'r') as f:
+        data_patch_size = int(f.attrs.get('patch_size', 8))
+    print(f"  [Data]  patch_size={data_patch_size}")
+
+    model, model_patch_size = load_model(stage, ckpt_path, device, json_path)
+
+    # 兼容性模式：模型 patch_size 与数据不一致时，自动适配
+    need_adapt = (model_patch_size != data_patch_size)
+    if need_adapt:
+        print(f"  ⚠️  兼容模式: 模型 patch_size={model_patch_size}"
+              f", 数据 patch_size={data_patch_size}")
+        print(f"      预测将在模型分辨率运行，结果双线性插值到数据分辨率后对比")
 
     val_dataset = KnittingWindowDataset(h5_path, split='val')
     val_loader  = DataLoader(
@@ -160,7 +206,12 @@ def evaluate_stage(
 
         # ── 所有 Stage 统一使用独立高斯噪声 ──────────────────────
         torch.manual_seed(batch_idx)   # 固定 seed 保证可复现
-        x = torch.randn_like(center_sim)
+        if need_adapt:
+            # 兼容模式：噪声在模型分辨率生成
+            B, C = center_sim.shape[0], center_sim.shape[1]
+            x = torch.randn(B, C, model_patch_size, model_patch_size, device=device)
+        else:
+            x = torch.randn_like(center_sim)
 
         # ── Euler ODE（所有 Stage 统一） ──────────────────────────
         dt = 1.0 / n_steps
@@ -180,6 +231,12 @@ def evaluate_stage(
 
         x1_pred = x.clamp(-1, 1)
         x1_true = center_sim
+
+        # 兼容模式：将预测插值到数据分辨率后对比
+        if need_adapt and x1_pred.shape[2:] != x1_true.shape[2:]:
+            x1_pred = F.interpolate(
+                x1_pred, size=x1_true.shape[2:], mode='bilinear', align_corners=False
+            )
 
         # ── 转到 [0,1] ────────────────────────────────────────────
         pred_01 = denormalize(x1_pred).clamp(0, 1)
@@ -286,6 +343,9 @@ def compare_all_stages(
 
     rows = {}
     for sname, metrics in all_metrics.items():
+        if metrics.get('skipped'):
+            print(f"{sname:<12}  ⚠️  跳过: {metrics.get('reason', 'unknown')}")
+            continue
         row_data = {}
         row = f"{sname:<12}"
         for k in keys:

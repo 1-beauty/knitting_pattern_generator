@@ -19,24 +19,69 @@ venv/
 *.swp
 *.swo
 
-# Outputs (large binary files)
-outputs/runs/
-*.bmp
-*.png
-*.npy
+# =================================================================
+# 说明：本仓库仅上传源代码。数据集、模型权重、论文相关材料均不上传。
+# =================================================================
 
-# Dataset (too large for git)
+# ---- 模型权重 (Weights) ----
+checkpoints/
+**/checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.h5
+*.pkl
+*.pickle
+
+# ---- 数据集 (Datasets) ----
 dataset_raw/
 dataset_processed/
 dataset_raw_pruned_backup/
+**/dataset_raw/
+**/dataset_processed/
+**/dataset_raw_pruned_backup/
+conditional-flow-matching-main/data/
+sd-cache/
+*.npy
+*.npz
+*.tar
+*.tar.gz
+*.zip
 
-# Checkpoints (model weights)
-conditional-flow-matching-main/checkpoints/
+# ---- 生成/实验输出 (Outputs) ----
+outputs/
+**/outputs/
+*.bmp
 
-# OS
+# ---- 论文相关材料 (Paper / submission) ----
+docs/
+.qoder/
+scientific_image_skill_runs/
+scripts/_*
+*.pdf
+*.docx
+*.pptx
+*.tiff
+*.tif
+
+# ---- 预览/临时图片与调试产物 ----
+# 图片二进制默认不上传（保持原策略）；如确需保留某张资源图，用 git add -f <path> 强制添加
+*.png
+*.jpg
+*.jpeg
+*.gif
+_preview_*.png
+_crop_*.png
+_fig*_crop*.png
+*_preview.png
+*_debug.png
+
+# ---- OS ----
 Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Logs
+# ---- Logs ----
 *.log

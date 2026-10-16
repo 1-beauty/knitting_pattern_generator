@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Optional, Tuple
 
-from generation.mask_utils import point_in_mask, has_mask_shape
+from generation.mask_utils import point_in_mask, has_mask_shape, get_center_size
 
 
 def region_by_id(regions: Iterable) -> Dict[str, object]:
@@ -99,15 +99,7 @@ def parent_scan_bbox(region, regions_by_id: Dict[str, object], grid_size: int) -
     placement = getattr(parent, "placement", {}) or {}
     if placement.get("type") == "full":
         return 0, 0, grid_size - 1, grid_size - 1
-    center = placement.get("center", [grid_size // 2, grid_size // 2])
-    try:
-        cr, cc = int(center[0]), int(center[1])
-    except Exception:
-        cr, cc = grid_size // 2, grid_size // 2
-    try:
-        size = int(placement.get("size", grid_size // 3))
-    except Exception:
-        size = grid_size // 3
+    cr, cc, size = get_center_size(placement, grid_size)
     return (
         max(0, cr - size),
         max(0, cc - size),

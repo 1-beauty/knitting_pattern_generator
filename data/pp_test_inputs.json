@@ -1,0 +1,37 @@
+[
+  {
+    "id": "pp_01",
+    "prompt": "矩形边框，内部圆形，圆形内波浪吊目，背景平针",
+    "expected_texture": ["f_split", "f_tuck"]
+  },
+  {
+    "id": "pp_02",
+    "prompt": "左侧圆形内蜂巢，右侧菱形内绞花，两者并排，背景平针",
+    "expected_texture": ["f_tuck", "b_tuck", "xfer_l1", "xfer_r1"]
+  },
+  {
+    "id": "pp_03",
+    "prompt": "圆形内蜂巢吊目，圆形外部全部平针",
+    "expected_texture": ["f_tuck", "b_tuck"]
+  },
+  {
+    "id": "pp_04",
+    "prompt": "细矩形边框内高密度罗纹填充",
+    "expected_texture": ["f_knit", "b_knit"]
+  },
+  {
+    "id": "pp_05",
+    "prompt": "上半部分波浪吊目，下半部分竖条纹罗纹，交界处平针过渡",
+    "expected_texture": ["f_split", "f_tuck", "f_knit", "b_knit"]
+  },
+  {
+    "id": "pp_06_base",
+    "prompt": "圆形内波浪吊目，矩形边框，背景平针",
+    "expected_texture": ["f_split", "f_tuck"]
+  },
+  {
+    "id": "pp_06_edit",
+    "prompt": "圆形内波浪吊目，矩形边框，背景稀疏网眼",
+    "expected_texture": ["f_split", "f_tuck", "b_tuck"]
+  }
+]

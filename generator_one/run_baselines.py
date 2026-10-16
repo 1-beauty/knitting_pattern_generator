@@ -176,10 +176,86 @@ def run_llm_direct(llm_client: LLMClient, prompt: str) -> Dict[str, Any]:
     }
 
 
+def run_no_layer_clip(llm_client: LLMClient, prompt: str) -> Dict[str, Any]:
+    """Run baseline: disable layer clipping (父子层级裁剪)."""
+    config = PipelineConfig(
+        enable_refinement=True,
+        enable_aesthetic=True,
+        enable_llm_repair=True,
+        save_intermediate=False,
+        no_layer_clip=True,
+    )
+    pipeline = KnittingPipeline(llm_client=llm_client, config=config)
+    result = pipeline.generate(prompt)
+    return {
+        "action_grid": result.action_grid_40x40,
+        "execution_time": result.execution_time,
+        "statistics": result.statistics,
+    }
+
+
+def run_no_wave_pair(llm_client: LLMClient, prompt: str) -> Dict[str, Any]:
+    """Run baseline: disable wave pair guard (波浪配对约束)."""
+    config = PipelineConfig(
+        enable_refinement=True,
+        enable_aesthetic=True,
+        enable_llm_repair=True,
+        save_intermediate=False,
+        no_wave_pair_guard=True,
+    )
+    pipeline = KnittingPipeline(llm_client=llm_client, config=config)
+    result = pipeline.generate(prompt)
+    return {
+        "action_grid": result.action_grid_40x40,
+        "execution_time": result.execution_time,
+        "statistics": result.statistics,
+    }
+
+
+def run_plan_grid(llm_client: LLMClient, prompt: str) -> Dict[str, Any]:
+    """Internal baseline: Plan-Grid（dense 密集编译，无修复）."""
+    config = PipelineConfig(
+        enable_refinement=True,
+        enable_aesthetic=True,
+        enable_llm_repair=False,
+        save_intermediate=False,
+        compile_mode="dense",
+    )
+    pipeline = KnittingPipeline(llm_client=llm_client, config=config)
+    result = pipeline.generate(prompt)
+    return {
+        "action_grid": result.action_grid_40x40,
+        "execution_time": result.execution_time,
+        "statistics": result.statistics,
+    }
+
+
+def run_plan_grid_repair(llm_client: LLMClient, prompt: str) -> Dict[str, Any]:
+    """Internal baseline: Plan-Grid+Repair（dense 密集编译 + 同一 checker/修复）."""
+    config = PipelineConfig(
+        enable_refinement=True,
+        enable_aesthetic=True,
+        enable_llm_repair=True,
+        save_intermediate=False,
+        compile_mode="dense",
+    )
+    pipeline = KnittingPipeline(llm_client=llm_client, config=config)
+    result = pipeline.generate(prompt)
+    return {
+        "action_grid": result.action_grid_40x40,
+        "execution_time": result.execution_time,
+        "statistics": result.statistics,
+    }
+
+
 METHODS = {
     "ours": ("Ours (Full)", run_ours),
     "no_plan": ("Ours w/o PatternPlan", run_no_plan),
     "llm_direct": ("LLM-Direct", run_llm_direct),
+    "no_layer_clip": ("No Layer Clipping", run_no_layer_clip),
+    "no_wave_pair": ("No Wave Pair Guard", run_no_wave_pair),
+    "plan_grid": ("Plan-Grid", run_plan_grid),
+    "plan_grid_repair": ("Plan-Grid+Repair", run_plan_grid_repair),
 }
 
 
@@ -292,7 +368,7 @@ def print_summary_table(results: List[Dict[str, Any]]):
     print(header)
     print("-" * 100)
 
-    for mk in ["ours", "no_plan", "llm_direct"]:
+    for mk in ["ours", "no_plan", "llm_direct", "no_layer_clip", "no_wave_pair", "plan_grid", "plan_grid_repair"]:
         if mk not in method_stats:
             continue
         s = method_stats[mk]
@@ -343,11 +419,28 @@ def main():
     parser.add_argument(
         "--methods",
         nargs="+",
-        default=["ours", "no_plan", "llm_direct"],
+        default=["ours", "no_plan", "llm_direct", "no_layer_clip", "no_wave_pair"],
         choices=list(METHODS.keys()),
         help="Methods to evaluate (default: all three)",
     )
+    parser.add_argument(
+        "--inputs-file",
+        type=str,
+        default=None,
+        help="Path to JSON file with test prompts (overrides built-in TEST_PROMPTS)",
+    )
     args = parser.parse_args()
+
+    # Load test prompts from file if provided
+    global TEST_PROMPTS
+    if args.inputs_file:
+        inputs_path = Path(args.inputs_file)
+        if not inputs_path.exists():
+            print(f"Error: inputs file not found: {inputs_path}")
+            sys.exit(1)
+        with open(inputs_path, "r", encoding="utf-8") as f:
+            TEST_PROMPTS = json.load(f)
+        print(f"Loaded {len(TEST_PROMPTS)} test prompts from {inputs_path}")
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)

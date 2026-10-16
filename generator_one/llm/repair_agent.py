@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 
 from core import actions
-from core.semantic_types import StitchType
 from utils.logger import logger
 
 
@@ -67,23 +66,6 @@ class RepairAgent:
         except Exception as e:
             logger.warning(f"RepairAgent unexpected error: {e}")
             return RepairPlan()
-
-    def apply_semantic_plan(
-        self,
-        stitch_grid,
-        plan: RepairPlan,
-    ):
-        fixed = stitch_grid.copy()
-        for edit in plan.semantic_edits:
-            try:
-                st = StitchType[edit.new_stitch_type.upper()]
-                r = int(edit.row)
-                c = int(edit.col)
-                if 0 <= r < fixed.shape[0] and 0 <= c < fixed.shape[1]:
-                    fixed[r, c] = int(st)
-            except Exception:
-                continue
-        return fixed
 
     def apply_action_plan(
         self,

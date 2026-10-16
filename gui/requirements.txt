@@ -1,0 +1,12 @@
+# Knit Studio 桌面前端依赖（仅 GUI 层，不含流水线本身的 torch / LLM 依赖）
+# 安装：/data/conda/envs/knitting/bin/python -m pip install -r gui/requirements.txt
+PySide6>=6.5
+PySide6-Fluent-Widgets>=1.5
+
+# Linux 服务器还需系统级 Qt 运行库（apt，非 pip）：
+#   sudo apt install -y libgl1 libxkbcommon-x11-0 libegl1 \
+#     libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-randr0 \
+#     libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+#     libdbus-1-3 fontconfig
+# 中文字体（否则界面文字显示为方块）：
+#   sudo apt install -y fonts-noto-cjk

@@ -1,0 +1,43 @@
+{
+  "schema_version": "pattern_plan/v1",
+  "canvas": { "width": 40, "height": 40 },
+  "layout_type": "framed",
+  "motifs": [
+    {
+      "motif_id": "bg_wave",
+      "motif_type": "panel",
+      "effect": "wave_tuck",
+      "region": { "type": "full" },
+      "params": { "period_x": 5, "period_y": 4, "split_col_offset": 2, "tuck_col_offset": 3 },
+      "role": "allover",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    },
+    {
+      "motif_id": "frame_mid",
+      "motif_type": "frame",
+      "effect": "plain",
+      "region": { "type": "border", "margin": 6, "center": [20, 20], "size": 13 },
+      "params": { "border_thickness": 2 },
+      "role": "border",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    },
+    {
+      "motif_id": "circle_lace",
+      "motif_type": "circle",
+      "effect": "lace",
+      "region": { "center": [20, 20], "size": 11, "shape": "circle" },
+      "params": { "period_x": 4, "period_y": 4, "stagger": true },
+      "role": "center",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": "frame_mid"
+    }
+  ],
+  "history": [
+    { "input": "NEST-02 满铺波浪背景+中层边框+框内圆形网眼（背景成组纹理跨越边框，考察成组与作用域，手工构造 fixed plan）", "source": "manual_edit" }
+  ]
+}

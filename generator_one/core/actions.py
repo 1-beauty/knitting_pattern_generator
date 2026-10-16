@@ -1,4 +1,4 @@
-﻿"""
+"""
 动作定义层 - 单一数据源
 
 从 instruction_info.json 加载 15 色动作定义。
@@ -81,40 +81,6 @@ def color_hex(action_idx: int) -> str:
     return info(action_idx).get("color", "#000000")
 
 
-def machine_color_hex(action_idx: int) -> str:
-    """机器软件导出色值。
-
-    注意：内部生成、规则判断和第二阶段数据集仍使用 color 字段。
-    machine_color 只用于导出给机器软件，不参与动作语义。风险动作仍
-    输出机器色表中的颜色，风险说明写入导出报告，避免机器图出现
-    恒强软件不认识的内部训练色。
-    """
-    return info(action_idx).get("machine_color") or color_hex(action_idx)
-
-
-def machine_export_safe(action_idx: int) -> bool:
-    item = info(action_idx)
-    if "machine_export_safe" in item:
-        return bool(item.get("machine_export_safe"))
-    return bool(item.get("machine_color") and item.get("machine_action_id") is not None)
-
-
-def machine_action_id(action_idx: int):
-    return info(action_idx).get("machine_action_id")
-
-
-def machine_action_name(action_idx: int) -> str:
-    return info(action_idx).get("machine_action_name") or ""
-
-
-def machine_export_issue(action_idx: int) -> str:
-    return info(action_idx).get("machine_export_issue") or ""
-
-
-def machine_export_requires_confirmation(action_idx: int) -> bool:
-    return bool(info(action_idx).get("machine_export_requires_confirmation", False))
-
-
 def _hex_to_rgb(h: str, action_idx: int, field_name: str) -> Tuple[int, int, int]:
     h = h or "#000000"
     h = str(h).lstrip("#")
@@ -129,10 +95,6 @@ def _hex_to_rgb(h: str, action_idx: int, field_name: str) -> Tuple[int, int, int
 
 def color_rgb(action_idx: int) -> Tuple[int, int, int]:
     return _hex_to_rgb(color_hex(action_idx), action_idx, "color")
-
-
-def machine_color_rgb(action_idx: int) -> Tuple[int, int, int]:
-    return _hex_to_rgb(machine_color_hex(action_idx), action_idx, "machine_color")
 
 
 def semantic(action_idx: int) -> str:
@@ -217,7 +179,7 @@ def loop_ids() -> Set[int]: return group("LOOP")
 def tuck_ids() -> Set[int]: return group("TUCK")
 def transfer_ids() -> Set[int]: return group("TRANSFER")
 def split_ids() -> Set[int]: return group("SPLIT")
-def miss_ids() -> Set[int]: return group("MISS")
+def miss_ids() -> Set[int]: return group("EMPTY")
 def drop_ids() -> Set[int]: return group("DROP")
 def carrier_ids() -> Set[int]: return group("CARRIER")
 
@@ -263,16 +225,6 @@ def build_palette_256():
     palette[255] = (255, 255, 255)
     return palette
 
-
-def build_machine_palette_256():
-    """构建机器软件色值调色板，仅用于机器导出。"""
-    import numpy as np
-    bg_color = machine_color_rgb(DEFAULT_BG)
-    palette = np.tile(np.array(bg_color, dtype=np.uint8), (256, 1))
-    for i in range(NUM_ACTIONS):
-        palette[i] = machine_color_rgb(i)
-    palette[255] = (255, 255, 255)
-    return palette
 
 # ============================================================
 # v7.1 新增：基础/精修/元动作分组

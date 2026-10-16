@@ -1,0 +1,44 @@
+{
+  "schema_version": "pattern_plan/v1",
+  "canvas": { "width": 40, "height": 40 },
+  "layout_type": "framed",
+  "motifs": [
+    {
+      "motif_id": "frame_1",
+      "motif_type": "frame",
+      "effect": "plain",
+      "region": { "type": "border", "margin": 2, "center": [20, 20], "size": 16 },
+      "params": { "border_thickness": 2 },
+      "role": "border",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    },
+    {
+      "motif_id": "circle_1",
+      "motif_type": "circle",
+      "effect": "plain",
+      "region": { "center": [20, 20], "size": 16, "shape": "circle" },
+      "params": {},
+      "role": "inner_shape",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    },
+    {
+      "motif_id": "wave_1",
+      "motif_type": "circle",
+      "effect": "lace",
+      "region": { "center": [20, 20], "size": 14, "shape": "circle" },
+      "params": { "period_x": 4, "period_y": 4, "stagger": true },
+      "role": "center",
+      "symmetry": "none",
+      "allow_refinement": true,
+      "parent_id": null
+    }
+  ],
+  "history": [
+    { "input": "矩形边框包裹中心圆形，圆形内部为波浪吊目，背景为平针", "source": "llm" },
+    { "input": "native-edit: wave_1.effect wave_tuck -> lace (params replaced by lace schema defaults), all geometry unchanged", "source": "manual_edit" }
+  ]
+}

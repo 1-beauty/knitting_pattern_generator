@@ -57,7 +57,7 @@ LLM_CONFIG = {
         "chat":  "deepseek-chat",
         "coder": "deepseek-coder",
     },
-    "timeout": 30,
+    "timeout": 300,
     "retry": {
         "max_attempts":  3,
         "backoff_factor": 2,

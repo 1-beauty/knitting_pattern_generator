@@ -93,6 +93,25 @@ class TransitionSolver:
                 if nb != self._f_knit:
                     continue
 
+                # 保护 wave pair：如果目标格的邻居已有 f_tuck/f_split，
+                # 说明该位置紧邻波浪配对，插入过渡会拆散配对。
+                _has_wave_neighbor = False
+                for dr2 in (-1, 0, 1):
+                    for dc2 in (-1, 0, 1):
+                        if dr2 == 0 and dc2 == 0:
+                            continue
+                        nnr, nnc = nr + dr2, nc + dc2
+                        if not (0 <= nnr < rows and 0 <= nnc < cols):
+                            continue
+                        nval = int(grid[nnr, nnc])
+                        if nval in self._TUCK or nval in (self._f_split, self._b_split):
+                            _has_wave_neighbor = True
+                            break
+                    if _has_wave_neighbor:
+                        break
+                if _has_wave_neighbor:
+                    continue
+
                 # 检查是否真的存在局部冲突：
                 # 1. 张力差过大
                 t_event = actions.tension(a)

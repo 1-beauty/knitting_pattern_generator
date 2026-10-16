@@ -17,7 +17,10 @@ from typing import List, Tuple
 
 from generation.visual_types import RealizationPlan, RealizationRegion, EventPoint
 from utils.logger import logger
-from generation.mask_utils import point_in_mask, get_mask_shape, has_mask_shape
+from generation.mask_utils import (
+    point_in_mask, get_mask_shape, has_mask_shape,
+    get_center_size, resolve_side_band_side, is_excluded_by_foreground,
+)
 from generation.layer_utils import layer_mask_contains, parent_scan_bbox, region_by_id
 
 
@@ -51,18 +54,23 @@ class EventPlanner:
                 continue
 
             region_events = self._plan_region(region)
+            _pre_clip = len(region_events)
             region_events = self._clip_events_to_region(region_events, region)
             if region.event_pattern == "diagonal_wave":
                 region_events = self._prune_unpaired_wave_events(region_events, region)
-            if region_events:
-                logger.info(
-                    f"    [{region.region_id}] pattern={region.event_pattern} "
-                    f"params={region.event_params} -> {len(region_events)} events"
-                )
-            else:
+            _p = region.placement or {}
+            logger.info(
+                f"    [{region.region_id}] pattern={region.event_pattern} "
+                f"shape={_p.get('shape','?')} size={_p.get('size','?')} "
+                f"center={_p.get('center','?')} "
+                f"parent={_p.get('parent_id','none')} "
+                f"pre_clip={_pre_clip} post_clip={len(region_events)} "
+                f"params={region.event_params}"
+            )
+            if not region_events:
                 logger.warning(
-                    f"    [{region.region_id}] pattern={region.event_pattern} "
-                    f"matched but generated 0 events (check params: {region.event_params})"
+                    f"    [{region.region_id}] generated 0 events "
+                    f"(check placement and parent chain)"
                 )
             events.extend(region_events)
 
@@ -377,6 +385,16 @@ class EventPlanner:
                     region_id=region.region_id,
                     reason="column_xfer left"
                 ))
+                # b_knit 支撑 stitches：确保 compiler_guard 不删除孤立的 transfer
+                for dc in (-1, 1):
+                    nc = cl + dc
+                    if 0 <= nc < self.grid_size:
+                        events.append(EventPoint(
+                            row=r, col=nc,
+                            action_abbr="b_knit",
+                            region_id=region.region_id,
+                            reason="cable_support"
+                        ))
             if 0 <= cr < self.grid_size:
                 events.append(EventPoint(
                     row=r, col=cr,
@@ -384,6 +402,15 @@ class EventPlanner:
                     region_id=region.region_id,
                     reason="column_xfer right"
                 ))
+                for dc in (-1, 1):
+                    nc = cr + dc
+                    if 0 <= nc < self.grid_size:
+                        events.append(EventPoint(
+                            row=r, col=nc,
+                            action_abbr="b_knit",
+                            region_id=region.region_id,
+                            reason="cable_support"
+                        ))
 
         return events
 
@@ -433,7 +460,7 @@ class EventPlanner:
         wave_direction = str(params.get("wave_direction", "diag_pos") or "diag_pos").lower()
         density_profile = str(params.get("density_profile", "") or "").lower()
         if not density_profile:
-            if shape in {"circle", "circular", "round", "oval", "ellipse"}:
+            if shape in {"circle", "circular", "round", "oval", "ellipse"} and size >= 12:
                 density_profile = "center_dense"
             else:
                 density_profile = "uniform"
@@ -527,9 +554,6 @@ class EventPlanner:
                     reason="diagonal_wave tuck"
                 ))
 
-        if bool(params.get("edge_anchor", False)):
-            events.extend(self._wave_edge_anchor_events(region, row_min, row_max, col_min, col_max))
-
         return events
 
     def _wave_pair_fits(
@@ -599,21 +623,6 @@ class EventPlanner:
 
         return best_phase
 
-    def _wave_edge_anchor_events(
-        self,
-        region: RealizationRegion,
-        row_min: int,
-        row_max: int,
-        col_min: int,
-        col_max: int,
-    ) -> List[EventPoint]:
-        """Do not synthesize extra seam events.
-
-        The wave rows themselves are visually acceptable; extra border-adjacent
-        split/tuck events have repeatedly simulated as holes at the seam.
-        """
-        return []
-
     def _accept_wave_density(
         self,
         r: int,
@@ -680,6 +689,15 @@ class EventPlanner:
         period_y = int(params.get("period_y", 4))
         stagger = bool(params.get("stagger", True))
 
+        # 窄环自适应：如果 ring 宽度小于事件周期，缩小周期以填充环带
+        _inner_excl = placement.get("inner_exclude")
+        if isinstance(_inner_excl, dict) and _inner_excl:
+            _ring_w = max(1, (int(size) - int(_inner_excl.get("size", 0)))) // 2
+            if _ring_w > 0 and _ring_w < period_x:
+                period_x = max(2, _ring_w)
+            if _ring_w > 0 and _ring_w < period_y:
+                period_y = max(2, _ring_w)
+
         row_min, row_max, col_min, col_max = self._get_region_scan_bounds(region)
 
         for r in range(row_min, row_max):
@@ -713,6 +731,15 @@ class EventPlanner:
         period_y = int(params.get("period_y", 4))
         stagger = bool(params.get("stagger", True))
 
+        # 窄环自适应
+        _inner_excl = placement.get("inner_exclude")
+        if isinstance(_inner_excl, dict) and _inner_excl:
+            _ring_w = max(1, (int(size) - int(_inner_excl.get("size", 0)))) // 2
+            if _ring_w > 0 and _ring_w < period_x:
+                period_x = max(2, _ring_w)
+            if _ring_w > 0 and _ring_w < period_y:
+                period_y = max(2, _ring_w)
+
         row_min, row_max, col_min, col_max = self._get_region_scan_bounds(region)
 
         for r in range(row_min, row_max):
@@ -735,19 +762,22 @@ class EventPlanner:
     # ============================================================
 
     def _pattern_honeycomb_tuck(self, region: RealizationRegion) -> List[EventPoint]:
-        # For closed geometric honeycomb motifs, keep the interior clean and
-        # let the boundary/baseline communicate the shape. This avoids visual
-        # confusion with wave cells or broken texture marks.
-        placement = region.placement or {}
-        shape = str(placement.get("mask_shape", placement.get("shape", ""))).lower()
-        if shape in {"hexagon", "hex"}:
-            return []
-
         events = []
         params = region.event_params
+        placement = region.placement or {}
         period_x = max(3, int(params.get("period_x", 4)))
         period_y = max(3, int(params.get("period_y", 4)))
         stagger = bool(params.get("stagger", True))
+
+        # 小区域自适应：如果区域尺寸小于周期，缩小周期以填充区域
+        _eff_size = int(placement.get("size", 16))
+        _inner_excl = placement.get("inner_exclude")
+        if isinstance(_inner_excl, dict) and _inner_excl:
+            _eff_size = max(2, (int(placement.get("size", 16)) - int(_inner_excl.get("size", 0))) // 2)
+        if _eff_size > 0 and _eff_size < period_x:
+            period_x = max(2, _eff_size)
+        if _eff_size > 0 and _eff_size < period_y:
+            period_y = max(2, _eff_size)
 
         row_min, row_max, col_min, col_max = self._get_region_scan_bounds(region)
 
@@ -899,7 +929,7 @@ class EventPlanner:
             return False
 
         if role == "side_band":
-            side = self._resolve_side_band_side(region)
+            side = resolve_side_band_side(placement, region.region_id, self.grid_size)
             try:
                 width = int(placement.get("width", placement.get("size", 6)))
             except Exception:
@@ -919,15 +949,30 @@ class EventPlanner:
                 if not point_in_mask(r, c, placement, self.grid_size):
                     return False
 
-                border_guard = int(region.event_params.get("border_guard", 0) or 0)
-                if border_guard > 0 and str(getattr(region, "border_style", "none") or "none").lower() != "none":
-                    guarded = dict(placement)
+                # ── 精确边框环排除 ──────────────────────────────────
+                # 使用与 action_builder._is_border 相同的掩码差集逻辑：
+                # border_ring = outer_mask AND NOT inner_mask
+                # 确保事件不会落在边框环上，从源头消除纹理覆盖边框的问题。
+                _border_style = str(getattr(region, 'border_style', 'none') or 'none').lower()
+                if _border_style != "none":
+                    _bt = max(1, int(getattr(region, 'border_thickness', 1) or 1))
+                    _inner_pl = dict(placement)
                     try:
-                        guarded["size"] = max(0, int(placement.get("size", size)) - border_guard)
+                        _inner_pl["size"] = max(0, int(placement.get("size", size)) - _bt)
                     except Exception:
-                        guarded["size"] = max(0, size - border_guard)
-                    if guarded.get("size", 0) > 0 and not point_in_mask(r, c, guarded, self.grid_size):
-                        return False
+                        _inner_pl["size"] = max(0, size - _bt)
+                    if _inner_pl.get("size", 0) > 0:
+                        if not point_in_mask(r, c, _inner_pl, self.grid_size):
+                            return False  # 在边框环上（outer 内但 inner 外）→ 拒绝
+
+                # inner_exclude：排除内圈区域（用于 ring / difference 类型）
+                inner_excl = placement.get("inner_exclude")
+                if isinstance(inner_excl, dict) and inner_excl:
+                    try:
+                        if point_in_mask(r, c, inner_excl, self.grid_size):
+                            return False
+                    except Exception:
+                        pass
 
                 # 给几何区域留一点边缘缓冲，避免事件压到边框上导致“拼块感”
                 edge_fade = int(region.event_params.get("edge_fade", 0) or 0)
@@ -939,13 +984,22 @@ class EventPlanner:
                         edge_fade = 2
 
                 if edge_fade > 0:
-                    inner = dict(placement)
-                    try:
-                        inner["size"] = max(0, int(placement.get("size", size)) - edge_fade)
-                    except Exception:
-                        inner["size"] = max(0, size - edge_fade)
-                    if inner.get("size", 0) > 0 and not point_in_mask(r, c, inner, self.grid_size):
-                        return False
+                    # 曲线形状（圆形/心形等）：mask 本身已是边界，
+                    # edge_fade 会过度裁剪小尺寸形状的事件区域
+                    _shape_ef = str(placement.get("shape", "")).lower()
+                    _is_curved_ef = any(
+                        s in _shape_ef for s in
+                        ["circle", "round", "heart", "star", "hexagon", "oval", "ellipse",
+                         "diamond", "triangle", "polygon"]
+                    )
+                    if not _is_curved_ef:
+                        inner = dict(placement)
+                        try:
+                            inner["size"] = max(0, int(placement.get("size", size)) - edge_fade)
+                        except Exception:
+                            inner["size"] = max(0, size - edge_fade)
+                        if inner.get("size", 0) > 0 and not point_in_mask(r, c, inner, self.grid_size):
+                            return False
                 return True
             except Exception:
                 return (abs(r - cr) <= size) and (abs(c - cc) <= size)
@@ -954,76 +1008,10 @@ class EventPlanner:
         return (abs(r - cr) <= size) and (abs(c - cc) <= size)
 
     def _is_excluded_by_foreground(self, r: int, c: int, placement: dict) -> bool:
-        masks = placement.get("exclude_masks") if isinstance(placement, dict) else None
-        if not masks:
-            return False
-        for item in masks:
-            if not isinstance(item, dict):
-                continue
-            mask = dict(item.get("placement") or {})
-            if not mask:
-                continue
-            try:
-                if has_mask_shape(mask) and point_in_mask(r, c, mask, self.grid_size):
-                    return True
-                if not has_mask_shape(mask):
-                    cr, cc, size = self._get_placement(mask)
-                    if abs(r - cr) <= size and abs(c - cc) <= size:
-                        return True
-            except Exception:
-                continue
-        return False
-
+        return is_excluded_by_foreground(r, c, placement, self.grid_size)
+    
     def _resolve_side_band_side(self, region: RealizationRegion) -> str:
-        placement = region.placement or {}
-        side_raw = str(placement.get("side", "")).strip().lower()
-        if side_raw in {"left", "right"}:
-            return side_raw
-
-        rid = str(region.region_id or "").lower()
-        if any(k in rid for k in ["right", "r_", "_r", "右"]):
-            return "right"
-        if any(k in rid for k in ["left", "l_", "_l", "左"]):
-            return "left"
-
-        center = placement.get("center")
-        if isinstance(center, (list, tuple)) and len(center) >= 2:
-            try:
-                return "right" if int(center[1]) >= self.grid_size // 2 else "left"
-            except Exception:
-                pass
-
-        return "left"
-
-    def _point_in_regular_polygon(self, r: int, c: int, cr: int, cc: int, size: int, n_sides: int, rotation: float = 0.0) -> bool:
-        """
-        检查点 (r,c) 是否位于以 (cr,cc) 为中心、半径 size 的正 n 边形内部。
-        使用射线法判断点是否在多边形内部。
-        """
-        import math
-
-        if n_sides < 3 or size <= 0:
-            return False
-
-        verts = []
-        for k in range(n_sides):
-            theta = 2.0 * math.pi * k / n_sides + rotation
-            x = cc + size * math.cos(theta)  # x 对应列
-            y = cr + size * math.sin(theta)  # y 对应行
-            verts.append((y, x))
-
-        # 点-in-多边形（ray casting）
-        inside = False
-        j = len(verts) - 1
-        py = float(r)
-        px = float(c)
-        for i in range(len(verts)):
-            yi, xi = verts[i]
-            yj, xj = verts[j]
-            intersect = ((yi > py) != (yj > py)) and (
-                px < (xj - xi) * (py - yi) / (yj - yi + 1e-12) + xi
-            )
-            if intersect:
-                inside = not inside
-            j = i
-        return inside
+        return resolve_side_band_side(
+            region.placement or {}, region.region_id, self.grid_size,
+        )
+    

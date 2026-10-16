@@ -134,20 +134,25 @@ rib/links/plain/reverse:
   example: {}
 
 ## 理解原则
-1. 用户说"麻花/绞花/扭针/cable/twist" -> visual_effect=cable
-2. 用户说"波浪/吊目/集圈纹/起伏凹凸波纹" -> visual_effect=wave_tuck（不是 plain！）
-3. 用户说"网眼/镂空/孔洞" -> visual_effect=lace
-4. 用户说"罗纹/rib/双床/竖条纹" -> visual_effect=rib
-5. 用户说"双针/links/正反交替" -> visual_effect=links
-6. 用户说"蜂巢/honeycomb" -> visual_effect=honeycomb
-7. 用户说"浮雕/凸起relief/救凸起纹理" -> visual_effect=relief
-8. 用户说"种子针/seed" -> visual_effect=seed
+1. 用户说“麻花/绞花/扭针/cable/twist” -> visual_effect=cable
+2. 用户说“波浪/吊目/集圈纹/起伏凹凸波纹” -> visual_effect=wave_tuck（不是 plain！）
+3. 用户说“网眼/镂空/孔洞” -> visual_effect=lace
+4. 用户说“罗纹/rib/双床/竖条纹” -> visual_effect=rib
+5. 用户说“双针/links/正反交替” -> visual_effect=links
+6. 用户说“蜂巢/honeycomb” -> visual_effect=honeycomb
+7. 用户说“浮雕/凸起relief/救凸起纹理” -> visual_effect=relief
+8. 用户说“种子针/seed” -> visual_effect=seed
 9. 用户没有特别指定纹理效果 -> visual_effect=plain
 10. visual_shape=wave 是波浪**形状**（菱形、波浪曲线等），visual_effect=wave_tuck 是波浪**纹理效果**
     两者可以组合：visual_shape="wave" + visual_effect="plain" = 平针波浪边框
     或         visual_shape="panel" + visual_effect="wave_tuck" = 矩形面板内有波浪纹理
-11. 用户只说"菱形/diamond/rhombus"，没有说"麻花/绞花/扭针/cable/twist"时，
+11. 用户只说“菱形/diamond/rhombus”，没有说“麻花/绞花/扭针/cable/twist”时，
     必须输出 visual_shape="diamond" + visual_effect="plain"，表示只有菱形轮廓/区域，不要自动加入内部麻花事件。
+12. **“形状内纹理”是单个 region**：用户说“圆形内波浪”“菱形内网眼”时，
+    这是一个 region，其中 visual_shape=形状，visual_effect=纹理。
+    不要拆成两个 region（一个 plain 容器 + 一个纹理）。
+13. **同一形状多次提及=同一实体**：当用户说“X内Y，X右侧Z”时，
+    两个“X”指的是同一个形状，只应创建一个 X region。
 
 ## 重要
 - 只输出合法 JSON，不输出解释
@@ -180,6 +185,14 @@ PATTERN_PLAN_SYSTEM_PROMPT = """将针织图案需求转换为可编辑 PatternP
     }
   ]
 }
+
+## 坐标约定（重要！）
+- center 格式为 [row, col]，即 [行号, 列号]
+- row（第0个元素）= 垂直位置：0 在顶部，39 在底部
+- col（第1个元素）= 水平位置：0 在最左，39 在最右
+- 画布中心 = [20, 20]
+- **左右并排**的图案：row 相同，col 不同。例：左边 [20, 14]，右边 [20, 26]
+- **上下排列**的图案：col 相同，row 不同。例：上面 [14, 20]，下面 [26, 20]
 
 ## 修改已有图案时输出
 {
@@ -228,8 +241,15 @@ centered, allover_repeat, framed, side_bands, vertical_repeat, mirror_pair
 9. 用户说“加宽边框”但没有说程度时，默认只加 1 层。
 10. 用户说“圆形/圆/circle/圆盘”时，边框必须用 motif_type="circle"（不是 "frame"）。"frame" 只用于矩形/方形边框。
 11. 用户说“小圆形”或描述圆形图案时，整体外轮廓应是圆形，不要用矩形框替代。
-12. 形状关键词映射：用户说“三角/triangle”→ motif_type="triangle"；“六边/六角/hexagon”→ "hexagon"；“心形/爱心/heart”→ "heart"；“星形/星星/star”→ "star"；“锯齿/zigzag”→ "zigzag"；“十字/cross”→ "cross"；“人字/chevron/V形”→ "chevron"；“多边形/polygon”→ "polygon"。不要把这些形状替换为 panel 或 diamond。
+12. 形状关键词映射：用户说“三角/triangle”→ motif_type="triangle"；“六边/六角/hexagon”→ "hexagon"；“心形/爱心/heart”→ "heart"；“星形/星星/star”→ "star"；“锯齿/zigzag”→ "zigzag”；“十字/cross”→ "cross"；“人字/chevron/V形”→ "chevron"；“多边形/polygon”→ "polygon"。不要把这些形状替换为 panel 或 diamond。
 13. 用户描述的形状就是 motif_type，不要用 frame 或 panel 替代几何形状（circle/triangle/hexagon/heart/star 等）。
+14. **“形状内纹理”是单个 motif**：用户说“圆形内波浪”“菱形内网眼”“三角形内蜂巢”时，
+    这是**一个** motif，其中 motif_type=形状，effect=纹理。例如“圆形内波浪”应为
+    motif_type="circle" + effect="wave_tuck"，而不是拆成两个 motif（一个 plain 圆形容器 + 一个波浪纹理）。
+    同理，“圆形右侧小三角形内网眼”应理解为：一个圆形 motif + 一个三角形 motif（effect=lace），
+    其中“圆形”只出现一次，不要为“圆形内波浪”和“圆形右侧”中的“圆形”分别创建两个 motif。
+15. **同一形状多次提及=同一实体**：当用户说“X内Y，X右侧Z”时，两个“X”指的是同一个形状，
+    只应创建一个 X motif。不要为同一个形状创建多个重复 motif。
 
 只输出 JSON，不输出解释。
 """

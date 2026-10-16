@@ -97,6 +97,23 @@ Examples:
         default=None,
         help="[消融] 加载固定 pattern_plan.json，跳过 LLM 生成，控制变量"
     )
+    gen_parser.add_argument(
+        "--compile-mode",
+        type=str,
+        choices=["event", "dense"],
+        default="event",
+        help="[基线] 编译模式：event=稀疏事件编译（完整方法），dense=Plan-Grid 密集填充基线"
+    )
+    gen_parser.add_argument(
+        "--no-layer-clip",
+        action="store_true",
+        help="[消融] 关闭层次作用域裁剪（Event-NoScope）"
+    )
+    gen_parser.add_argument(
+        "--no-wave-pair-guard",
+        action="store_true",
+        help="[消融] 关闭成组完整性守卫（Event-NoGroup）"
+    )
 
     # ========== random 子命令 ==========
     random_parser = subparsers.add_parser("random", help="随机生成图案")
@@ -112,6 +129,9 @@ Examples:
     random_parser.add_argument("--no-refinement", action="store_true")
     random_parser.add_argument("--no-aesthetic", action="store_true")
     random_parser.add_argument("--no-repair", action="store_true")
+    random_parser.add_argument("--compile-mode", type=str, choices=["event", "dense"], default="event")
+    random_parser.add_argument("--no-layer-clip", action="store_true")
+    random_parser.add_argument("--no-wave-pair-guard", action="store_true")
     random_parser.add_argument("--fixed-plan", type=str, default=None, help="[消融] 加载固定 plan，跳过 LLM")
 
     args = parser.parse_args()
@@ -148,6 +168,9 @@ def run_generation(args):
         save_intermediate=args.save_intermediate,
         skip_pattern_plan=getattr(args, 'no_plan', False),
         fixed_plan_path=getattr(args, 'fixed_plan', None) or "",
+        compile_mode=getattr(args, 'compile_mode', None) or "event",
+        no_layer_clip=getattr(args, 'no_layer_clip', False),
+        no_wave_pair_guard=getattr(args, 'no_wave_pair_guard', False),
     )
 
     llm_client = LLMClient()

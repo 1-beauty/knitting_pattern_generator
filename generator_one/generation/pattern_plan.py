@@ -499,7 +499,47 @@ class PatternPlanEngine:
             history=[{"source": "flat_visual_spec_baseline"}],
         )
 
+    def _preprocess_ring_motifs(self, plan: PatternPlan) -> None:
+        """修正 ring motif 的 parent_id，确保指向外框而非内圈 motif。
+
+        LLM 经常将 fill_mesh 的 parent_id 设为内圈圆，但 ring 应该
+        挂在外部容器（border/frame）下。 不修正会导致 _align_nested_regions
+        把 ring 的 outer 钳到内圈 motif 的 safe_size，使 ring 宽度归零。
+
+        注意：不在此处修改 size / outer_size，因为这些可能残留了上次运行
+        的脏值（如 outer_size=38）。下游 ring handler + _align_nested_regions
+        会通过 _ring_fixed 标记做正确的比例缩放。
+        """
+        border_motifs = [
+            m for m in plan.motifs
+            if m.role in {"border", "frame"}
+            or m.motif_type in {"frame"}
+        ]
+        for motif in plan.motifs:
+            if motif.region.get("type") != "ring":
+                continue
+            pid = motif.parent_id
+            # parent_id 指向非边框 motif → 重新挂到边框
+            if pid and border_motifs:
+                parent_candidate = next(
+                    (m for m in plan.motifs if m.motif_id == pid), None
+                )
+                if parent_candidate and parent_candidate.role not in {"border", "frame"}:
+                    frame = border_motifs[0]
+                    if frame.motif_id != motif.motif_id:
+                        logger.warning(
+                            f"  [{motif.motif_id}] ring parent_id '{pid}' is not a border, "
+                            f"re-parenting to '{frame.motif_id}'"
+                        )
+                        motif.parent_id = frame.motif_id
+            # 始终标记 _ring_fixed，让下游 _region_to_placement 和
+            # _align_nested_regions 知道这是需要保护的 ring 几何
+            motif.region["_ring_fixed"] = True
+
     def render_visual_spec(self, plan: PatternPlan) -> VisualSpec:
+        # Pre-pass: fix ring motifs before rendering
+        self._preprocess_ring_motifs(plan)
+
         regions = [VisualRegion(
             region_id="ground",
             visual_shape="panel",
@@ -545,19 +585,279 @@ class PatternPlanEngine:
             motif.motif_type = self._motif_to_visual_shape(motif.motif_type)
             motif.effect = self._effect_to_visual_effect(motif.effect)
             motif.role = self._normalize_role(motif.role)
-            motif.region = self._normalize_region(motif.region)
+            motif.region = self._normalize_region(motif.region, motif_role=motif.role, motif_type=motif.motif_type)
             motif.params = self._normalize_params(motif.effect, motif.params)
             self._normalize_side_band_motif(motif)
-        # 只在非随机来源时执行强修复，避免杀死随机多样性
+        # 只在非随机来源时执行修复（精简：只保留必要的空间适配修复）
         is_random = any(
             h.get("source") in ("random",) for h in plan.history
         )
         if not is_random:
-            self._repair_complex_layer_links(plan)
+            self._repair_ring_motifs(plan)              # 修复 LLM 误生成 panel 的环形 motif
+            self._repair_ring_role_motifs(plan)         # ring 尺寸 + inner_exclude
+            self._validate_coordinate_convention(plan, user_input)  # 先修复坐标交换，再做尺寸适配
+            self._repair_motif_shape_from_name(plan)    # 修复 LLM ID与type不一致（如 ID=diamond 但 type=circle）
+            self._merge_same_shape_border(plan)         # 同形边框合并：border与center同形状时合为一体
+            self._repair_plain_center_effect(plan, user_input)  # 修复 center effect=plain 但 prompt 有纹理关键词
+        else:
+            self._validate_coordinate_convention(plan, user_input)
+        self._separate_coincident_positions(plan, user_input)
+        self._setup_transition_regions(plan)
         self._infer_missing_parent_links(plan)
-        # 无论编辑来源（LLM/启发式），统一钳制边框厚度
+        self._validate_parent_assignments(plan)
         self._clamp_border_thickness(plan, user_input=user_input)
+        # 清理坐标交换标记
+        for m in plan.motifs:
+            if isinstance(m.region, dict):
+                m.region.pop("_coord_swapped", None)
         return plan
+
+    def _validate_coordinate_convention(self, plan: PatternPlan, user_input: str = "") -> None:
+        """Detect and fix LLM coordinate swap.
+
+        The system uses center=[row, col] where row=vertical, col=horizontal.
+        LLMs often generate center=[x, y] (Cartesian) which swaps the axes.
+
+        Heuristic: if motifs named with left/right keywords have different
+        row but same col, the coordinates are likely swapped — auto-fix.
+        """
+        _LR_KEYS = {"left", "right", "左", "右"}
+        _TB_KEYS = {"top", "bottom", "upper", "lower", "上", "下"}
+
+        def _has_key(name: str, keys: set) -> bool:
+            nl = name.lower().replace("_", "").replace("-", "")
+            return any(k in nl for k in keys)
+
+        lr_motifs = [m for m in plan.motifs if _has_key(m.motif_id, _LR_KEYS)]
+        tb_motifs = [m for m in plan.motifs if _has_key(m.motif_id, _TB_KEYS)]
+
+        # Skip if any motif was already swapped in a previous pass
+        if any(m.region.get("_coord_swapped") for m in plan.motifs if isinstance(m.region, dict)):
+            return
+
+        # Fallback: if no tb/lr motifs found by ID, try to detect from prompt
+        # Pattern: "上方X...下方Y" or "左方X...右方Y" where X/Y are shape names
+        _CN_EN = {
+            "圆形": "circle", "圆": "circle",
+            "菱形": "diamond", "菱": "diamond",
+            "矩形": "rectangle", "方形": "rectangle", "方框": "rectangle",
+            "三角形": "triangle", "三角": "triangle",
+            "心形": "heart", "心": "heart",
+            "星形": "star", "星": "star",
+            "六角形": "hexagon", "六角": "hexagon",
+        }
+
+        def _shape_matches(shape_cn: str, motif_type: str) -> bool:
+            mt = (motif_type or "").lower()
+            if shape_cn in mt or mt in shape_cn:
+                return True
+            en = _CN_EN.get(shape_cn, "")
+            if en and en in mt:
+                return True
+            # Also try stripping trailing chars
+            for suffix in ["形", "状"]:
+                stripped = shape_cn.rstrip(suffix)
+                if stripped and (stripped in mt or mt.startswith(stripped)):
+                    return True
+            return False
+
+        if user_input and not tb_motifs:
+            import re as _re
+            # Match patterns like "上方...圆形" / "下方...菱形"
+            _tb_pattern = _re.compile(
+                r'(?:上方|上面|上部|上)\s*(\S{1,6}?)(?:内|里|中|的|,)'
+                r'.*?'
+                r'(?:下方|下面|下部|下)\s*(\S{1,6}?)(?:内|里|中|的|,|$)'
+            )
+            m_tb = _tb_pattern.search(user_input)
+            if m_tb:
+                shape_top = m_tb.group(1).strip()
+                shape_bot = m_tb.group(2).strip()
+                # Find motifs matching these shape names
+                for m in plan.motifs:
+                    if _shape_matches(shape_top, m.motif_type):
+                        tb_motifs.append(m)
+                    elif _shape_matches(shape_bot, m.motif_type):
+                        tb_motifs.append(m)
+                if tb_motifs:
+                    logger.info(
+                        f"  tb_motifs detected from prompt: "
+                        f"top_shape='{shape_top}', bot_shape='{shape_bot}', "
+                        f"motifs={[m.motif_id for m in tb_motifs]}"
+                    )
+
+        if user_input and not lr_motifs:
+            import re as _re
+            _lr_pattern = _re.compile(
+                r'(?:左方|左边|左侧|左)\s*(\S{1,6}?)(?:内|里|中|的|,)'
+                r'.*?'
+                r'(?:右方|右边|右侧|右)\s*(\S{1,6}?)(?:内|里|中|的|,|$)'
+            )
+            m_lr = _lr_pattern.search(user_input)
+            if m_lr:
+                shape_left = m_lr.group(1).strip()
+                shape_right = m_lr.group(2).strip()
+                for m in plan.motifs:
+                    if _shape_matches(shape_left, m.motif_type):
+                        lr_motifs.append(m)
+                    elif _shape_matches(shape_right, m.motif_type):
+                        lr_motifs.append(m)
+                if lr_motifs:
+                    logger.info(
+                        f"  lr_motifs detected from prompt: "
+                        f"left_shape='{shape_left}', right_shape='{shape_right}', "
+                        f"motifs={[m.motif_id for m in lr_motifs]}"
+                    )
+
+        # Detect swap in left/right motifs: should differ in col (center[1]),
+        # not in row (center[0]).
+        if len(lr_motifs) >= 2:
+            rows = set()
+            cols = set()
+            for m in lr_motifs:
+                c = m.region.get("center", [20, 20])
+                if isinstance(c, (list, tuple)) and len(c) >= 2:
+                    rows.add(c[0])
+                    cols.add(c[1])
+            if len(rows) > 1 and len(cols) <= 1:
+                logger.warning(
+                    f"  coordinate swap detected: left/right motifs have "
+                    f"different rows {rows} but same cols {cols}. "
+                    f"Swapping center[0] <-> center[1]."
+                )
+                for m in lr_motifs:
+                    c = m.region.get("center", [20, 20])
+                    if isinstance(c, (list, tuple)) and len(c) >= 2:
+                        m.region["center"] = [c[1], c[0]]
+                        m.region["_coord_swapped"] = True
+
+        # Detect swap in top/bottom motifs: should differ in row (center[0]),
+        # not in col (center[1]).
+        if len(tb_motifs) >= 2:
+            rows = set()
+            cols = set()
+            for m in tb_motifs:
+                c = m.region.get("center", [20, 20])
+                if isinstance(c, (list, tuple)) and len(c) >= 2:
+                    rows.add(c[0])
+                    cols.add(c[1])
+            if len(cols) > 1 and len(rows) <= 1:
+                # Case 1: different cols, same rows → LLM used [x,y] format, swap needed
+                logger.warning(
+                    f"  coordinate swap detected: top/bottom motifs have "
+                    f"different cols {cols} but same rows {rows}. "
+                    f"Swapping center[0] <-> center[1]."
+                )
+                for m in tb_motifs:
+                    c = m.region.get("center", [20, 20])
+                    if isinstance(c, (list, tuple)) and len(c) >= 2:
+                        m.region["center"] = [c[1], c[0]]
+                        m.region["_coord_swapped"] = True
+            # NOTE: different rows + same cols is CORRECT for top/bottom layout, no swap needed
+
+    def _separate_coincident_positions(self, plan: PatternPlan, user_input: str = "") -> None:
+        """当多个 border motif 共享同一中心位置时，根据 motif_id 中的方位词分散它们及其子 motif。
+
+        LLM 有时将“并排”“左右”等空间关系理解为同一位置，导致圆形完全重叠。
+        本方法检测同位置冲突，并按方位关键词重新分配坐标，同时移动关联的子 motif。
+        """
+        CANVAS = 40
+        # 只处理非背景 motif
+        content_motifs = [
+            m for m in plan.motifs
+            if m.role not in {"allover", "background", "ground"}
+        ]
+        # 按 (size, center) 分组——只有尺寸和位置都相同才算冲突
+        center_groups: dict = {}
+        for m in content_motifs:
+            c = m.region.get("center")
+            if not isinstance(c, (list, tuple)) or len(c) < 2:
+                continue
+            try:
+                key = (int(c[0]), int(c[1]))
+            except (TypeError, ValueError):
+                continue
+            center_groups.setdefault(key, []).append(m)
+
+        # 检查是否有同位置冲突
+        has_conflict = any(len(g) > 1 for g in center_groups.values())
+        if not has_conflict:
+            return
+
+        # 按方位词前缀分组（left/right/top/bottom）
+        direction_groups: dict = {}
+        for m in content_motifs:
+            mid = m.motif_id.lower()
+            if any(k in mid for k in ["left", "左"]):
+                direction_groups.setdefault("left", []).append(m)
+            elif any(k in mid for k in ["right", "右"]):
+                direction_groups.setdefault("right", []).append(m)
+            elif any(k in mid for k in ["top", "上"]):
+                direction_groups.setdefault("top", []).append(m)
+            elif any(k in mid for k in ["bottom", "下"]):
+                direction_groups.setdefault("bottom", []).append(m)
+
+        # 左右分布
+        if "left" in direction_groups and "right" in direction_groups:
+            left_max_size = max(int(m.region.get("size", 10)) for m in direction_groups["left"])
+            right_max_size = max(int(m.region.get("size", 10)) for m in direction_groups["right"])
+            # 查找 frame 边界
+            frame_center_c = CANVAS // 2
+            frame_inner_half = CANVAS // 2 - 2
+            for fm in plan.motifs:
+                if fm.role in {"border", "frame"} and isinstance(fm.region, dict):
+                    fc = fm.region.get("center", [20, 20])
+                    fs = int(fm.region.get("size", 17))
+                    bt = int(fm.params.get("border_thickness", 2) or 2)
+                    try:
+                        frame_center_c = int(fc[1])
+                    except (TypeError, ValueError):
+                        frame_center_c = 20
+                    frame_inner_half = max(3, (fs - bt) // 2)
+                    break
+            new_left_col = frame_center_c - max(left_max_size // 2 + 1, frame_inner_half // 2)
+            new_right_col = frame_center_c + max(right_max_size // 2 + 1, frame_inner_half // 2)
+            for m in direction_groups["left"]:
+                old = list(m.region["center"])
+                m.region["center"][1] = new_left_col
+                logger.warning(f"  [{m.motif_id}] separated left: col {old[1]} -> {new_left_col}")
+            for m in direction_groups["right"]:
+                old = list(m.region["center"])
+                m.region["center"][1] = new_right_col
+                logger.warning(f"  [{m.motif_id}] separated right: col {old[1]} -> {new_right_col}")
+
+        # 上下分布
+        elif "top" in direction_groups and "bottom" in direction_groups:
+            top_max_size = max(int(m.region.get("size", 10)) for m in direction_groups["top"])
+            bottom_max_size = max(int(m.region.get("size", 10)) for m in direction_groups["bottom"])
+            # 查找包含这些 motif 的 frame，用 frame 边界代替画布边界
+            frame_center_r = CANVAS // 2
+            frame_inner_half = CANVAS // 2 - 2  # 默认值
+            for fm in plan.motifs:
+                if fm.role in {"border", "frame"} and isinstance(fm.region, dict):
+                    fc = fm.region.get("center", [20, 20])
+                    fs = int(fm.region.get("size", 17))
+                    bt = int(fm.params.get("border_thickness", 2) or 2)
+                    try:
+                        frame_center_r = int(fc[0])
+                    except (TypeError, ValueError):
+                        frame_center_r = 20
+                    frame_inner_half = max(3, (fs - bt) // 2)
+                    break
+            # 布局：圆形位于 frame 内 1/4 和 3/4 处，保证不重叠且尽量大
+            sep_offset = max(3, frame_inner_half // 2)
+            new_top_row = frame_center_r - sep_offset
+            new_bottom_row = frame_center_r + sep_offset
+            for m in direction_groups["top"]:
+                old = list(m.region["center"])
+                m.region["center"][0] = new_top_row
+                logger.warning(f"  [{m.motif_id}] separated top: row {old[0]} -> {new_top_row}")
+            for m in direction_groups["bottom"]:
+                old = list(m.region["center"])
+                m.region["center"][0] = new_bottom_row
+                logger.warning(f"  [{m.motif_id}] separated bottom: row {old[0]} -> {new_bottom_row}")
+
+            # 分离后不重新计算尺寸：frame 缩放已给出合理尺寸，分离只调整位置
 
     def _clamp_border_thickness(self, plan: PatternPlan, user_input: str = "") -> None:
         """根据当前编辑指令推断允许的最大边框厚度，并钗制所有 border motif 的 thickness。
@@ -610,6 +910,8 @@ class PatternPlanEngine:
 
     def _repair_plan_from_text(self, plan: PatternPlan, user_input: str) -> None:
         text = user_input or ""
+        # 先修复坐标交换，再做尺寸适配
+        self._validate_coordinate_convention(plan, text)
 
         self._repair_allover_geometry_semantics(plan, text)
 
@@ -634,7 +936,7 @@ class PatternPlanEngine:
             for motif in plan.motifs:
                 rid = motif.motif_id.lower()
                 if motif.effect in {"honeycomb", "relief", "wave_tuck", "lace", "plain"} and (
-                    motif.motif_type in {"panel", "allover"} or "hex" in rid or "honeycomb" in rid
+                    motif.motif_type in {"panel", "allover", "circle"} or "hex" in rid or "honeycomb" in rid
                 ):
                     if motif.role in {"center", "main"}:
                         motif.motif_type = "hexagon"
@@ -645,12 +947,15 @@ class PatternPlanEngine:
                 rid = motif.motif_id.lower()
                 if "triangle" in rid or "三角" in rid or motif.region.get("shape") == "triangle":
                     motif.region["shape"] = "triangle"
-                    if motif.motif_type in {"mesh", "panel", "allover"} and motif.effect in {"plain", "honeycomb", "lace", "relief", "seed"}:
+                    if motif.motif_type in {"mesh", "panel", "allover", "circle"} and motif.effect in {"plain", "honeycomb", "lace", "relief", "seed"}:
                         motif.motif_type = "triangle"
 
         if any(k in text for k in ["圆形", "圆形结构", "圆内部", "circle", "round"]):
             for motif in plan.motifs:
                 rid = motif.motif_id.lower()
+                # Skip motifs explicitly identified as non-circle shapes
+                if any(s in rid for s in ["triangle", "三角", "hexagon", "六角", "六边", "heart", "心形", "star", "星形", "cross", "十字", "chevron", "人字"]):
+                    continue
                 is_outer_frame = motif.role == "border" or any(k in rid for k in ["frame", "border", "边框", "outer"])
                 is_texture = motif.effect in {"wave_tuck", "lace", "relief", "honeycomb", "seed"}
                 is_center_like = motif.role in {"center", "main"} or any(k in rid for k in ["inner", "inside", "内部", "wave", "mesh", "circle"])
@@ -822,6 +1127,8 @@ class PatternPlanEngine:
         if "motifs" in data:
             plan = PatternPlan.from_dict(data)
             self._validate_motif_effect_compatibility(plan)
+            self._validate_parent_ids(plan)
+            self._validate_size_constraints(plan)
             return plan
 
         if "operation" in data:
@@ -860,6 +1167,183 @@ class PatternPlanEngine:
                 )
                 motif.effect = corrected
 
+    def _validate_parent_ids(self, plan: PatternPlan) -> None:
+        """检查并修正不合理的 parent_id 关系。
+        规则：
+        1. 子 motif 的 size 不应明显大于父 motif 的 size（子不应比父大）
+        2. 如果子比父大，清除 parent_id 并记录警告
+        """
+        motifs_by_id = {m.motif_id: m for m in plan.motifs}
+        for motif in plan.motifs:
+            if not motif.parent_id:
+                continue
+            parent = motifs_by_id.get(motif.parent_id)
+            if parent is None:
+                logger.warning(f"  [{motif.motif_id}] parent_id='{motif.parent_id}' 不存在，清除")
+                motif.parent_id = None
+                continue
+            child_size = motif.region.get("size", 0)
+            parent_size = parent.region.get("size", 0)
+            child_center = motif.region.get("center", [20, 20])
+            parent_center = parent.region.get("center", [20, 20])
+            # 子不应比父大超过 2
+            if child_size > parent_size + 2 and parent.role not in {"border", "frame"}:
+                logger.warning(
+                    f"  [{motif.motif_id}] size={child_size} > parent [{parent.motif_id}] "
+                    f"size={parent_size}，父子关系不合理，清除 parent_id"
+                )
+                motif.parent_id = None
+            # 同心圆/同形状重叠：如果父子中心相同且都是相同形状，
+            # 子被父包含没有意义，清除 parent_id
+            elif (
+                child_center == parent_center
+                and child_size <= parent_size
+                and str(motif.region.get("shape", motif.motif_type)).lower()
+                    == str(parent.region.get("shape", parent.motif_type)).lower()
+                and parent.role not in {"border", "frame"}
+            ):
+                logger.warning(
+                    f"  [{motif.motif_id}] 与父 [{parent.motif_id}] 同心同形，"
+                    f"父子关系无意义，清除 parent_id"
+                )
+                motif.parent_id = None
+
+    def _validate_size_constraints(self, plan: PatternPlan) -> None:
+        """验证并修正尺寸约束。只做一件事：确保 frame 足够大以容纳子区域。
+            
+        双向适应：外框扩展 + 子区域等比缩小，互相适应融合。
+        """
+        canvas_size = int(plan.canvas.get("width", 40))
+            
+        for motif in plan.motifs:
+            if motif.role not in {"border", "frame"}:
+                continue
+            frame_size = int(motif.region.get("size", 16))
+            frame_center = motif.region.get("center", [20, 20])
+            try:
+                fcr, fcc = int(frame_center[0]), int(frame_center[1])
+            except Exception:
+                fcr, fcc = 20, 20
+            border_thickness = int(motif.params.get("border_thickness", 2) or 2)
+    
+            # 收集子区域：优先用 parent_id，否则收集空间上在 frame 内部的几何 motif
+            children = [m for m in plan.motifs if m.parent_id == motif.motif_id]
+            if not children:
+                frame_half = frame_size / 2.0
+                for m in plan.motifs:
+                    if m is motif or m.role in {"ground", "allover"} or m.motif_type == "panel":
+                        continue
+                    if m.motif_type not in {"circle", "diamond", "triangle", "hexagon", "heart", "star", "rectangle", "polygon", "frame"}:
+                        continue
+                    c = (m.region if isinstance(m.region, dict) else {}).get("center")
+                    if not c or len(c) < 2:
+                        continue
+                    try:
+                        cr2, cc2 = int(c[0]), int(c[1])
+                    except Exception:
+                        continue
+                    if abs(cr2 - fcr) <= frame_half and abs(cc2 - fcc) <= frame_half:
+                        children.append(m)
+            if not children:
+                continue
+    
+            # Step 1: 先 cap frame 到画布安全上限
+            safe_max = max(canvas_size // 2 - border_thickness - 1, 8)
+            if frame_size > safe_max:
+                logger.info(
+                    f"  [{motif.motif_id}] frame size={frame_size} exceeds safe max={safe_max} "
+                    f"(canvas={canvas_size}, border={border_thickness}), capping"
+                )
+                motif.region["size"] = safe_max
+                motif.region.pop("top_left", None)
+                motif.region.pop("bottom_right", None)
+                motif.region.pop("bounds", None)
+                frame_size = safe_max
+
+            # Step 2: 计算需要的最小 frame 尺寸，尝试扩展（不超过 safe_max）
+            min_frame_size = frame_size
+            for child in children:
+                child_size = int(child.region.get("size", 0))
+                cr = child.region.get("center", frame_center) if isinstance(child.region, dict) else frame_center
+                try:
+                    offset = max(abs(int(cr[0]) - fcr), abs(int(cr[1]) - fcc))
+                except Exception:
+                    offset = 0
+                # frame_size >= 2*offset + child_size + border_thickness
+                needed = 2 * offset + child_size + border_thickness
+                min_frame_size = max(min_frame_size, needed)
+    
+            # 扩展 frame（不超过 safe_max）
+            target_frame_size = min(min_frame_size, safe_max)
+            if target_frame_size > frame_size:
+                logger.warning(
+                    f"  [{motif.motif_id}] frame size={frame_size} too small for children "
+                    f"(needs {min_frame_size}), expanding to {target_frame_size}"
+                )
+                motif.region["size"] = target_frame_size
+                motif.region.pop("top_left", None)
+                motif.region.pop("bottom_right", None)
+                motif.region.pop("bounds", None)
+                frame_size = target_frame_size
+    
+            # 子区域适配：先缩放位置，再最大化尺寸
+            inner_half = max(1, (frame_size - border_thickness) / 2.0)
+            needs_adjust = False
+            for child in children:
+                cr = child.region.get("center", [fcr, fcc]) if isinstance(child.region, dict) else [fcr, fcc]
+                try:
+                    ccr, ccc = int(cr[0]), int(cr[1])
+                except Exception:
+                    ccr, ccc = fcr, fcc
+                child_size = int(child.region.get("size", 0)) if isinstance(child.region, dict) else 0
+                max_off = max(0, inner_half - child_size / 2.0)
+                if abs(ccr - fcr) > max_off or abs(ccc - fcc) > max_off:
+                    needs_adjust = True
+                    break
+    
+            if needs_adjust:
+                # Phase 1: 计算位置缩放因子（仅缩放位置，不缩放尺寸）
+                pos_scales = []
+                for child in children:
+                    cr = child.region.get("center", [fcr, fcc]) if isinstance(child.region, dict) else [fcr, fcc]
+                    try:
+                        ccr, ccc = int(cr[0]), int(cr[1])
+                    except Exception:
+                        ccr, ccc = fcr, fcc
+                    child_size = int(child.region.get("size", 0)) if isinstance(child.region, dict) else 0
+                    offset = max(abs(ccr - fcr), abs(ccc - fcc))
+                    max_off = max(0, inner_half - child_size / 2.0)
+                    if offset > max_off and offset > 0:
+                        pos_scales.append(max(0.5, max_off / offset))
+                    else:
+                        pos_scales.append(1.0)
+                min_pos_scale = min(pos_scales) if pos_scales else 1.0
+                logger.info(f"  [{motif.motif_id}] children pos_scale={min_pos_scale:.2f}")
+
+                # Phase 2: 缩放位置，计算新位置
+                new_positions = []  # [(new_r, new_c, child_index)]
+                for child in children:
+                    cr = child.region.get("center", [fcr, fcc]) if isinstance(child.region, dict) else [fcr, fcc]
+                    try:
+                        ccr, ccc = int(cr[0]), int(cr[1])
+                    except Exception:
+                        ccr, ccc = fcr, fcc
+                    new_r = int(fcr + (ccr - fcr) * min_pos_scale)
+                    new_c = int(fcc + (ccc - fcc) * min_pos_scale)
+                    new_positions.append((new_r, new_c))
+
+                # Phase 3: 最大化尺寸（仅 frame 边界约束，兄弟约束由分离后重新计算）
+                for i, child in enumerate(children):
+                    child_size = int(child.region.get("size", 0)) if isinstance(child.region, dict) else 0
+                    new_r, new_c = new_positions[i]
+                    # Frame 边界约束
+                    new_offset = max(abs(new_r - fcr), abs(new_c - fcc))
+                    max_size = max(4, int(2 * (inner_half - new_offset)))
+                    new_size = max(4, min(child_size, max_size))
+                    if new_size != child_size:
+                        child.region["size"] = new_size
+                    child.region["center"] = [new_r, new_c]
+    
     def _visual_spec_data_to_plan(self, data: Dict[str, Any]) -> PatternPlan:
         motifs = []
         for idx, region in enumerate(data.get("regions", []) or []):
@@ -1369,7 +1853,7 @@ class PatternPlanEngine:
             return 12
         return 16
 
-    def _normalize_region(self, region: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_region(self, region: Dict[str, Any], motif_role: str = "", motif_type: str = "") -> Dict[str, Any]:
         region = dict(region or {})
         if region.get("type") == "full":
             full = {"type": "full"}
@@ -1417,7 +1901,12 @@ class PatternPlanEngine:
         center = region.get("center", [20, 20])
         if not isinstance(center, list) or len(center) < 2:
             center = [20, 20]
-        size = max(4, min(20, int(region.get("size", 16))))
+        # frame/border 类型不受 size=20 上限限制，它们需要足够大以容纳子区域
+        _is_frame = motif_role in {"border", "frame"} or motif_type == "frame"
+        if _is_frame:
+            size = max(4, int(region.get("size", 16)))  # 只限制下限，不限制上限
+        else:
+            size = max(4, min(20, int(region.get("size", 16))))
         region["center"] = [max(0, min(39, int(center[0]))), max(0, min(39, int(center[1])))]
         region["size"] = size
         return region
@@ -1446,33 +1935,35 @@ class PatternPlanEngine:
         ]
         if not candidates:
             return None
-
+    
         def score(m: PatternMotif) -> tuple:
-            role_penalty = 0 if m.role == "center" else 2
             rid = m.motif_id.lower()
             frame_penalty = 2 if (
-                m.role == "border"
-                or m.motif_type == "frame"
-                or any(k in rid for k in ["frame", "border", "边框", "outer"])
+                m.motif_type == "frame"
+                or any(k in rid for k in ["frame", "border", "\u8fb9\u6846", "outer"])
             ) else 0
             try:
                 size = int(m.region.get("size", 0))
             except Exception:
                 size = 0
-            return (role_penalty, frame_penalty, -size)
-
+            # 最大尺寸优先：嵌套几何形状中，最大的是自然容器
+            # 不再对 border 角色加 penalty，因为外层容器通常是 border 角色
+            return (-size, frame_penalty)
+    
         return sorted(candidates, key=score)[0]
 
     def _repair_complex_layer_links(self, plan: PatternPlan) -> None:
+        geometry = {"diamond", "circle", "triangle", "hexagon", "polygon", "heart", "star", "rectangle"}
         containers = {
             m.motif_id: m for m in plan.motifs
-            if m.motif_type in {"diamond", "circle", "triangle", "hexagon", "polygon", "heart", "star", "rectangle"}
+            if m.motif_type in geometry
             and m.role in {"center", "border"}
         }
         central = self._best_central_container(plan)
         if central is None:
             return
 
+        texture_effects = {"wave_tuck", "lace", "relief", "honeycomb", "seed", "rib", "links", "cable"}
         for motif in plan.motifs:
             if motif is central:
                 continue
@@ -1485,11 +1976,16 @@ class PatternPlanEngine:
                 bad_parent = True
             if parent is not None and parent.role == "side_band":
                 bad_parent = True
-            if motif.effect in {"wave_tuck", "lace", "relief", "honeycomb", "seed"}:
-                rid = motif.motif_id.lower()
-                looks_inner = any(k in rid for k in ["inner", "inside", "fill", "mesh", "wave", "内部", "里面"])
+
+            rid = motif.motif_id.lower()
+            looks_inner = any(k in rid for k in ["inner", "inside", "fill", "mesh", "wave", "cable", "内部", "里面"])
+            is_texture = motif.effect in texture_effects
+            is_geometric = motif.motif_type in geometry
+
+            # 几何形状或纹理效果的内层 motif，若无有效父级，链接到 central
+            if (is_texture or is_geometric) and looks_inner:
                 shape_hint = str(motif.region.get("shape", "")).lower()
-                if looks_inner and (
+                if (
                     bad_parent
                     or parent is None
                     or shape_hint == central.motif_type
@@ -1497,6 +1993,721 @@ class PatternPlanEngine:
                 ):
                     motif.parent_id = central.motif_id
                     motif.region["shape"] = central.motif_type
+
+    def _flatten_redundant_containers(self, plan: PatternPlan) -> None:
+        """消除多余的 plain 容器层。
+
+        当 LLM 创建了一个 plain 容器（如 inner_circle）只包含一个同形状的
+        更小兄弟（如 cable_center）时，移除该容器，让内容直接挂到祖父级。
+        例如：outer_circle → inner_circle(plain) → cable_center(cable)
+        变为：outer_circle → cable_center(cable)
+        """
+        geometry = {"diamond", "circle", "triangle", "hexagon", "polygon", "heart", "star", "rectangle"}
+        to_remove = set()
+
+        for motif in plan.motifs:
+            # 只处理 plain 几何容器
+            if motif.effect not in {"plain", "none", ""}:
+                continue
+            if motif.motif_type not in geometry:
+                continue
+            if not motif.parent_id:
+                continue
+
+            # 查找该容器的子级
+            children = [
+                m for m in plan.motifs
+                if m.parent_id == motif.motif_id
+                and m.motif_type in geometry
+            ]
+            if len(children) != 1:
+                continue
+
+            child = children[0]
+            # 检查是否同形状
+            parent_shape = str(motif.region.get("shape", motif.motif_type)).lower()
+            child_shape = str(child.region.get("shape", child.motif_type)).lower()
+            if parent_shape != child_shape:
+                continue
+
+            # 移除冗余容器，将子级挂到祖父级
+            grandparent_id = motif.parent_id
+            child.parent_id = grandparent_id
+            to_remove.add(motif.motif_id)
+            logger.info(
+                f"[flatten] removed redundant container {motif.motif_id}, "
+                f"{child.motif_id} now child of {grandparent_id}"
+            )
+
+        # 从 plan.motifs 中移除冗余容器
+        if to_remove:
+            plan.motifs = [m for m in plan.motifs if m.motif_id not in to_remove]
+
+    def _repair_motif_shape_from_name(self, plan: PatternPlan) -> None:
+        """根据 motif_id 中的几何形状关键词修正 motif_type 和 region.shape。
+
+        LLM 常将菱形、三角形等创建为 circle，但名称中包含正确的形状关键词。
+        """
+        geometry = {"diamond", "circle", "triangle", "hexagon", "polygon", "heart", "star", "rectangle"}
+        _shape_keywords = {
+            "diamond": "diamond",
+            "菱形": "diamond",
+            "triangle": "triangle",
+            "三角形": "triangle",
+            "hexagon": "hexagon",
+            "六边形": "hexagon",
+            "heart": "heart",
+            "心形": "heart",
+            "star": "star",
+            "星形": "star",
+            "rectangle": "rectangle",
+            "矩形": "rectangle",
+            "方形": "rectangle",
+        }
+        for motif in plan.motifs:
+            mid = motif.motif_id.lower()
+            # 检查名称中是否包含形状关键词
+            detected_shape = None
+            for keyword, shape_name in _shape_keywords.items():
+                if keyword in mid:
+                    detected_shape = shape_name
+                    break
+            if detected_shape is None:
+                continue
+            # 如果 motif_type 已经是正确的形状，跳过
+            if motif.motif_type == detected_shape:
+                continue
+            # 修正 motif_type 和 region.shape
+            old_type = motif.motif_type
+            motif.motif_type = detected_shape
+            if isinstance(motif.region, dict):
+                motif.region["shape"] = detected_shape
+            logger.info(
+                f"[shape_repair] {motif.motif_id}: {old_type} -> {detected_shape} "
+                f"(name contains '{detected_shape}')"
+            )
+
+    def _merge_same_shape_border(self, plan: PatternPlan) -> None:
+        """同形边框合并：当 border motif 与 center motif 形状相同时，转为边框环带事件源。
+    
+        用户说“圆形内竖条纹，边框波浪吊目”时，意图是一个圆形：
+        - 内部：竖条纹（rib）
+        - 边界：波浪（wave_tuck）
+        而不是两个同心圆。当 LLM 将边框创建为独立的同形 border motif 时，
+        将 border 转为环带事件源：去掉填充和轮廓，只保留事件，
+        并通过 inner_exclude 让事件只出现在边框环带上。
+    
+        合并策略：
+        - 保留 center motif（内部效果）
+        - 吸收 border 的 border_thickness
+        - 用 border 的 size（通常稍大）更新 center 的 size
+        - border motif 转为环带事件源：去掉 border_style，添加 inner_exclude
+        """
+        border_motifs = [m for m in plan.motifs if m.role == "border"]
+        center_motifs = [m for m in plan.motifs if m.role == "center"]
+    
+        for border in border_motifs:
+            # 查找同形状的 center motif
+            matching_center = None
+            for center in center_motifs:
+                if center.motif_type == border.motif_type:
+                    matching_center = center
+                    break
+    
+            if matching_center is None:
+                continue
+    
+            # 合并：吸收 border 的属性到 center
+            border_thickness = int(border.params.get("border_thickness", 2) or 2)
+            matching_center.params["border_thickness"] = border_thickness
+    
+            # 用 border 的 size 更新 center（border 通常稍大）
+            border_size = int(border.region.get("size", 0)) if isinstance(border.region, dict) else 0
+            center_size = int(matching_center.region.get("size", 0)) if isinstance(matching_center.region, dict) else 0
+            if border_size > center_size and isinstance(matching_center.region, dict):
+                matching_center.region["size"] = border_size
+    
+            # 将 border 转为环带事件源：
+            # 1. 去掉 border_style，避免渲染第二个轮廓
+            border.params["border_style"] = "none"
+            border.params["border_thickness"] = 0
+    
+            # 2. 添加 inner_exclude 排除内部区域，事件只出现在边框环带
+            inner_size = max(0, border_size - border_thickness)
+            center_pos = border.region.get("center", [20, 20]) if isinstance(border.region, dict) else [20, 20]
+            border.region["inner_exclude"] = {
+                "shape": border.motif_type,
+                "center": list(center_pos),
+                "size": inner_size,
+            }
+    
+            logger.info(
+                f"[border_merge] {border.motif_id} ({border.motif_type}) -> ring event source: "
+                f"size={border_size}, inner_exclude size={inner_size}, border_thickness={border_thickness}"
+            )
+            break  # 只合并第一个匹配的 border
+
+    def _setup_transition_regions(self, plan: PatternPlan) -> None:
+        """为 transition 角色区域设置 inner_exclude，形成环形过渡带。
+
+        用户说“圆形外稀疏平针过渡”时，LLM 生成 role=transition 的区域。
+        该区域应是圆形与背景之间的环形带。本方法为 transition 区域
+        添加 inner_exclude（排除内部圆形），使其成为环形。
+        """
+        transition_motifs = [m for m in plan.motifs if m.role in ("transition", "surround")]
+        if not transition_motifs:
+            return
+
+        center_motifs = [m for m in plan.motifs if m.role == "center"]
+
+        for trans in transition_motifs:
+            if not isinstance(trans.region, dict):
+                continue
+
+            # 始终确保 transition/surround 不画边框
+            trans.params["border_style"] = "none"
+
+            if trans.region.get("inner_exclude"):
+                continue  # 已有 inner_exclude，跳过设置
+
+            trans_center = trans.region.get("center", [20, 20])
+            trans_size = int(trans.region.get("size", 0))
+
+            # 查找同中心的最大 center motif 作为 inner_exclude
+            best_center = None
+            best_size = 0
+            for cm in center_motifs:
+                if not isinstance(cm.region, dict):
+                    continue
+                cm_center = cm.region.get("center", [20, 20])
+                cm_size = int(cm.region.get("size", 0))
+                # 检查是否同中心（允许小偏差）
+                if abs(cm_center[0] - trans_center[0]) <= 2 and abs(cm_center[1] - trans_center[1]) <= 2:
+                    if cm_size < trans_size and cm_size > best_size:
+                        best_center = cm
+                        best_size = cm_size
+
+            if best_center is None:
+                continue
+
+            # 设置 inner_exclude
+            inner_shape = best_center.motif_type
+            inner_center = best_center.region.get("center", [20, 20])
+            trans.region["inner_exclude"] = {
+                "shape": inner_shape,
+                "center": list(inner_center),
+                "size": best_size,
+            }
+            # 确保 transition 的 shape 与内部形状一致
+            if trans.motif_type == "frame":
+                trans.motif_type = best_center.motif_type
+            # 不画边框（环形区域的边界由内部/外部形状定义）
+            trans.params["border_style"] = "none"
+            logger.info(
+                f"[transition_setup] {trans.motif_id}: inner_exclude "
+                f"{inner_shape} size={best_size} (from {best_center.motif_id})"
+            )
+
+    # prompt 纹理关键词 → effect 映射
+    _TEXTURE_KEYWORDS = {
+        "竖条纹": "rib", "条纹": "rib", "rib": "rib",
+        "波浪": "wave_tuck", "wave": "wave_tuck",
+        "蜂巢": "honeycomb", "蜂窝": "honeycomb", "honeycomb": "honeycomb",
+        "网眼": "mesh", "mesh": "mesh",
+        "麻花": "cable", "菱形": "cable", "cable": "cable",
+        "罗纹": "rib",
+    }
+
+    def _repair_plain_center_effect(self, plan: PatternPlan, user_input: str) -> None:
+        """修复 center motif 的 effect=plain，当 prompt 明确指定了纹理时。
+
+        LLM 有时将"竖条纹"等纹理错误映射为 plain，导致圆形内部无纹理。
+        本方法从 prompt 中检测纹理关键词，修复 center 的 effect。
+        """
+        if not user_input:
+            return
+
+        # 查找 effect=plain 的 center motif
+        for motif in plan.motifs:
+            if motif.role != "center":
+                continue
+            if motif.effect not in ("plain", "none", ""):
+                continue  # 已有纹理，不覆盖
+
+            # 在 prompt 中查找纹理关键词
+            detected_effect = None
+            for keyword, effect in self._TEXTURE_KEYWORDS.items():
+                if keyword in user_input:
+                    detected_effect = effect
+                    break
+
+            if detected_effect is None:
+                continue
+
+            # 修复 effect
+            old_effect = motif.effect
+            motif.effect = detected_effect
+            # 确保有默认参数
+            defaults = self._default_params(detected_effect, user_input or "")
+            for pk, pv in defaults.items():
+                motif.params.setdefault(pk, pv)
+            logger.info(
+                f"[effect_repair] {motif.motif_id}: effect {old_effect} -> {detected_effect} "
+                f"(prompt keyword matched)"
+            )
+            break  # 只修复第一个 center
+
+    def _repair_ring_motifs(self, plan: PatternPlan) -> None:
+        """修复被 LLM 误解为 allover/panel 的环形 motif。
+
+        当 prompt 包含 "环形区域" 时，LLM 常将环形纹理创建为 allover/panel，
+        导致整个画布都是该纹理。本方法检测并修复此类 motif：
+        1. 名称包含 "ring" 或 "环"
+        2. 当前是 panel/allover（非几何形状）
+        3. 存在嵌套的圆形容器
+
+        修复后：转换为 circle/center，size 取外层容器和内层容器的中间值，
+        并添加 inner_exclude 排除内层容器。
+        """
+        geometry = {"diamond", "circle", "triangle", "hexagon", "polygon", "heart", "star", "rectangle"}
+        # 查找环形 motif：名称包含 ring/环，且当前不是几何形状
+        ring_motif = None
+        for motif in plan.motifs:
+            mid = motif.motif_id.lower()
+            if "ring" in mid or "环" in mid:
+                if motif.motif_type not in geometry:
+                    ring_motif = motif
+                    break
+        if ring_motif is None:
+            return
+
+        # 查找嵌套的圆形容器
+        circles = [
+            m for m in plan.motifs
+            if m.motif_type == "circle" and m.role in {"center", "border"}
+        ]
+        if len(circles) < 2:
+            return
+
+        # 按 size 降序排列
+        def get_size(m: PatternMotif) -> int:
+            try:
+                return int(m.region.get("size", 0))
+            except Exception:
+                return 0
+        circles_sorted = sorted(circles, key=get_size, reverse=True)
+        outer = circles_sorted[0]  # 最大圆
+        inner = circles_sorted[1]  # 次大圆
+
+        outer_size = get_size(outer)
+        inner_size = get_size(inner)
+
+        # 计算环形 size：取外层和内层的中间值
+        ring_size = (outer_size + inner_size) // 2
+        if ring_size <= inner_size:
+            ring_size = inner_size + 2
+
+        # 获取中心坐标
+        center = outer.region.get("center", [20, 20])
+
+        # 修复 ring motif：标记为 ring 类型而非 circle
+        # 这样下游知道这是环形区域（2个圆之间的空间），不是第三个圆
+        ring_motif.motif_type = "circle"  # 几何形状仍是 circle，但 type=ring
+        ring_motif.role = "center"
+        ring_motif.region = {
+            "type": "ring",  # 关键：标记为 ring 类型
+            "center": list(center),
+            "size": ring_size,
+            "shape": "circle",
+            "inner_exclude": {
+                "shape": inner.motif_type,
+                "center": list(inner.region.get("center", [20, 20])),
+                "size": inner_size,
+            },
+        }
+        logger.info(
+            f"[ring_repair] {ring_motif.motif_id}: panel/allover -> ring/center "
+            f"size={ring_size} (between outer={outer_size} and inner={inner_size})"
+        )
+
+    def _distribute_overlapping_siblings(self, plan: PatternPlan) -> None:
+        """分布同形状且中心重叠的兄弟 motif。
+
+        LLM 常将多个同形状 motif 放在同一中心（如三个圆形都在 [20,20]）。
+        本方法检测此类重叠并根据名称中的位置关键词重新分布。
+        """
+        geometry = {"diamond", "circle", "triangle", "hexagon", "polygon", "heart", "star", "rectangle"}
+        # 位置关键词映射（相对于画布中心的偏移比例）
+        _position_offsets = {
+            # 水平分布
+            "left": (-0.35, 0), "左": (-0.35, 0),
+            "center": (0, 0), "中": (0, 0),
+            "right": (0.35, 0), "右": (0.35, 0),
+            # 垂直分布
+            "top": (0, -0.3), "上": (0, -0.3),
+            "bottom": (0, 0.3), "下": (0, 0.3),
+            # 组合位置
+            "top_left": (-0.3, -0.25), "左上": (-0.3, -0.25),
+            "top_right": (0.3, -0.25), "右上": (0.3, -0.25),
+            "bottom_left": (-0.3, 0.25), "左下": (-0.3, 0.25),
+            "bottom_right": (0.3, 0.25), "右下": (0.3, 0.25),
+        }
+        # 按 (shape, parent_id) 分组
+        groups: Dict[tuple, list] = {}
+        for motif in plan.motifs:
+            if motif.motif_type not in geometry:
+                continue
+            region = motif.region if isinstance(motif.region, dict) else {}
+            center = region.get("center")
+            if not center or len(center) < 2:
+                continue
+            try:
+                size = int(region.get("size", 0))
+            except Exception:
+                size = 0
+            if size <= 0:
+                continue
+            key = (motif.motif_type, motif.parent_id or "")
+            groups.setdefault(key, []).append(motif)
+
+        for (shape, parent_id), siblings in groups.items():
+            if len(siblings) < 2:
+                continue
+            # 检测中心重叠的簇
+            centers = []
+            for m in siblings:
+                r = m.region if isinstance(m.region, dict) else {}
+                c = r.get("center", [20, 20])
+                centers.append((int(c[0]), int(c[1])))
+            # 检查是否所有中心都相同或非常接近
+            unique_centers = set(centers)
+            if len(unique_centers) <= 1:
+                # 所有 motif 在同一中心，需要分布
+                # 从 plan.canvas 获取画布尺寸
+                canvas_w = int(plan.canvas.get("width", 40))
+                canvas_h = int(plan.canvas.get("height", 40))
+                canvas_center_r = canvas_h // 2
+                canvas_center_c = canvas_w // 2
+                # 根据名称中的位置关键词分配偏移
+                distributed = False
+                for m in siblings:
+                    mid = m.motif_id.lower()
+                    offset = None
+                    for keyword, off in _position_offsets.items():
+                        if keyword in mid:
+                            offset = off
+                            break
+                    if offset is not None:
+                        # 应用偏移
+                        new_r = int(canvas_center_r + offset[0] * canvas_h)
+                        new_c = int(canvas_center_c + offset[1] * canvas_w)
+                        # 确保在画布内
+                        new_r = max(5, min(canvas_h - 5, new_r))
+                        new_c = max(5, min(canvas_w - 5, new_c))
+                        if isinstance(m.region, dict):
+                            m.region["center"] = [new_r, new_c]
+                        distributed = True
+                        logger.info(
+                            f"[sibling_dist] {m.motif_id}: center [{centers[0]}] -> [{new_r}, {new_c}] "
+                            f"(keyword='{keyword}')"
+                        )
+                # 如果没有匹配到位置关键词，自动水平分布
+                if not distributed and len(siblings) >= 2:
+                    spacing = canvas_w // (len(siblings) + 1)
+                    for i, m in enumerate(siblings):
+                        new_c = spacing * (i + 1)
+                        new_r = canvas_center_r
+                        if isinstance(m.region, dict):
+                            m.region["center"] = [new_r, new_c]
+                        logger.info(
+                            f"[sibling_dist] {m.motif_id}: center [{centers[0]}] -> [{new_r}, {new_c}] "
+                            f"(auto horizontal)"
+                        )
+
+    def _add_sibling_exclusion_masks(self, plan: PatternPlan) -> None:
+        """为嵌套的同中心兄弟区域添加 inner_exclude 掩码。
+
+        当两个兄弟区域共享同一父级且形状相同时，较大的区域应排除较小区域的
+        空间，形成环形结构。例如：mesh_ring(size=14) 和 inner_circle(size=10)
+        都是 outer_circle 的子级，mesh_ring 应排除 inner_circle 的区域。
+        """
+        geometry = {"diamond", "circle", "triangle", "hexagon", "polygon", "heart", "star", "rectangle"}
+        # 按 parent_id 分组
+        children_by_parent: Dict[str, list] = {}
+        for motif in plan.motifs:
+            pid = motif.parent_id
+            if not pid:
+                continue
+            if motif.motif_type not in geometry:
+                continue
+            children_by_parent.setdefault(pid, []).append(motif)
+
+        for pid, children in children_by_parent.items():
+            if len(children) < 2:
+                continue
+            # 按 size 降序排列
+            def get_size(m: PatternMotif) -> int:
+                try:
+                    return int(m.region.get("size", 0))
+                except Exception:
+                    return 0
+            children_sorted = sorted(children, key=get_size, reverse=True)
+            # 对每个较大的区域，排除所有比它小的同中心兄弟
+            for i, larger in enumerate(children_sorted):
+                for smaller in children_sorted[i + 1:]:
+                    larger_size = get_size(larger)
+                    smaller_size = get_size(smaller)
+                    if smaller_size >= larger_size:
+                        continue
+                    # 检查是否同中心（距离 < 2）
+                    try:
+                        lc = larger.region.get("center", [20, 20])
+                        sc = smaller.region.get("center", [20, 20])
+                        dist = abs(int(lc[0]) - int(sc[0])) + abs(int(lc[1]) - int(sc[1]))
+                    except Exception:
+                        continue
+                    if dist > 2:
+                        continue
+                    # 检查形状是否相同
+                    larger_shape = str(larger.region.get("shape", "")).lower()
+                    smaller_shape = str(smaller.region.get("shape", "")).lower()
+                    if larger_shape and smaller_shape and larger_shape != smaller_shape:
+                        continue
+                    # 只有当 larger 自身有纹理事件时，才应排除 smaller
+                    # 如果 larger 是 plain（无事件），它只是 smaller 的容器，不应变成环形
+                    _no_event_effects = {"plain", "none", ""}
+                    if larger.effect in _no_event_effects:
+                        continue
+                    # 为 larger 添加 inner_exclude 掩码
+                    exclude = {
+                        "shape": smaller.motif_type,
+                        "center": smaller.region.get("center", [20, 20]),
+                        "size": smaller_size,
+                    }
+                    larger.region.setdefault("inner_exclude", exclude)
+                    logger.debug(
+                        f"[sibling_exclude] {larger.motif_id} excludes {smaller.motif_id} "
+                        f"(size {smaller_size} inside {larger_size})"
+                    )
+
+    def _repair_ring_role_motifs(self, plan: PatternPlan) -> None:
+        """为 role=ring 或 region.type=ring 的 motif 自动设置 inner_exclude 和外层尺寸。
+
+        当 LLM 创建环形区域（如"矩形内套小矩形，环形区域网眼"）时，
+        ring motif 可能没有 inner_exclude，或者尺寸不正确。
+        本方法：
+        1. 找同中心的较大 frame 作为 ring 的外层边界（设置 ring 的 size）
+        2. 找同中心的较小 motif 作为 inner_exclude（形成环形）
+        """
+        for motif in plan.motifs:
+            # 检查是否是 ring 类型
+            is_ring = (
+                motif.role == "ring"
+                or str(motif.region.get("type", "")).lower() == "ring"
+                or "ring" in motif.motif_id.lower()
+            )
+            if not is_ring:
+                continue
+            ring_center = motif.region.get("center", [20, 20])
+            try:
+                ring_r, ring_c = int(ring_center[0]), int(ring_center[1])
+            except Exception:
+                ring_r, ring_c = 20, 20
+            ring_size = int(motif.region.get("size", 0))
+            
+            # 如果 ring 已有 outer_size 字段，用它作为外层尺寸
+            outer_size_field = motif.region.get("outer_size")
+            if outer_size_field is not None:
+                try:
+                    outer_sz = int(outer_size_field)
+                    if outer_sz > ring_size:
+                        motif.region["size"] = outer_sz
+                        ring_size = outer_sz
+                except Exception:
+                    pass
+            
+            # 找同中心的较大 frame 作为外层边界（仅当没有 outer_size 字段时）
+            if outer_size_field is None:
+                best_outer = None
+                best_outer_size = ring_size
+                for other in plan.motifs:
+                    if other is motif:
+                        continue
+                    if other.role not in {"border", "frame"}:
+                        continue
+                    other_center = other.region.get("center", [20, 20])
+                    try:
+                        or2, oc2 = int(other_center[0]), int(other_center[1])
+                    except Exception:
+                        continue
+                    if abs(or2 - ring_r) + abs(oc2 - ring_c) > 3:
+                        continue
+                    other_size = int(other.region.get("size", 0))
+                    if other_size > best_outer_size:
+                        best_outer_size = other_size
+                        best_outer = other
+                
+                # 扩展 ring 的 size 到外层 frame 的 size
+                if best_outer is not None and best_outer_size > ring_size:
+                    motif.region["size"] = best_outer_size
+                    logger.info(
+                        f"[ring_repair] {motif.motif_id}: expanded size {ring_size} -> {best_outer_size} "
+                        f"(matching outer frame {best_outer.motif_id})"
+                    )
+                    ring_size = best_outer_size
+            
+            # 已有 inner_exclude 则跳过
+            if motif.region.get("inner_exclude"):
+                continue
+            
+            # 优先使用 inner_size/ring_inner_size/outer_size 字段构造 inner_exclude
+            inner_size_field = motif.region.get("inner_size") or motif.region.get("ring_inner_size")
+            if inner_size_field is not None:
+                try:
+                    inner_sz = int(inner_size_field)
+                except Exception:
+                    inner_sz = 0
+                if inner_sz > 0:
+                    # 找同中心且尺寸匹配的 motif 作为 inner_exclude 的形状参考
+                    inner_shape = "rectangle"  # 默认
+                    for other in plan.motifs:
+                        if other is motif:
+                            continue
+                        other_center = other.region.get("center", [20, 20])
+                        try:
+                            or2 = int(other_center[0])
+                            oc2 = int(other_center[1])
+                        except Exception:
+                            continue
+                        if abs(or2 - ring_r) + abs(oc2 - ring_c) > 3:
+                            continue
+                        other_sz = int(other.region.get("size", 0))
+                        if abs(other_sz - inner_sz) <= 2:
+                            inner_shape = str(other.region.get("shape", other.motif_type)).lower()
+                            break
+                    motif.region["inner_exclude"] = {
+                        "shape": inner_shape,
+                        "center": [ring_r, ring_c],
+                        "size": inner_sz,
+                    }
+                    logger.info(
+                        f"[ring_repair] {motif.motif_id}: inner_exclude from inner_size={inner_sz} "
+                        f"(shape={inner_shape})"
+                    )
+                    continue
+            
+            # 回退：找同中心的较小兄弟 motif 作为 inner_exclude
+            best_inner = None
+            best_inner_size = 0
+            for other in plan.motifs:
+                if other is motif:
+                    continue
+                if other.role in {"ground", "allover"}:
+                    continue
+                if other.motif_type == "panel":
+                    continue
+                other_center = other.region.get("center", [20, 20])
+                try:
+                    or2, oc2 = int(other_center[0]), int(other_center[1])
+                except Exception:
+                    continue
+                if abs(or2 - ring_r) + abs(oc2 - ring_c) > 3:
+                    continue
+                other_size = int(other.region.get("size", 0))
+                if other_size >= ring_size:
+                    continue
+                # 形状兼容检查
+                ring_shape = str(motif.region.get("shape", motif.motif_type)).lower()
+                other_shape = str(other.region.get("shape", other.motif_type)).lower()
+                if other_shape and ring_shape and other_shape != ring_shape:
+                    _rect_aliases = {"frame", "border", "rectangle", "rect", "box"}
+                    if not (other_shape in _rect_aliases and ring_shape in _rect_aliases):
+                        continue
+                if other_size > best_inner_size:
+                    best_inner_size = other_size
+                    best_inner = other
+            
+            if best_inner is not None:
+                exclude = {
+                    "shape": best_inner.motif_type,
+                    "center": list(best_inner.region.get("center", [20, 20])),
+                    "size": best_inner_size,
+                }
+                motif.region["inner_exclude"] = exclude
+                logger.info(
+                    f"[ring_repair] {motif.motif_id}: added inner_exclude -> "
+                    f"{best_inner.motif_id} (size={best_inner_size})"
+                )
+
+    def _repair_nested_frame_borders(self, plan: PatternPlan, user_input: str = "") -> None:
+        """修复嵌套边框语义：当 prompt 描述"大X内套小X"时，确保内部 X 有可见边框。
+        
+        LLM 可能将内层边框错误地生成为 type=panel 或没有 border_thickness，
+        此方法根据 prompt 语义自动修复。
+        """
+        import re
+        prompt_lower = user_input.lower()
+        
+        # 检测嵌套语义模式
+        # "大矩形内套小矩形" / "大圆内套小圆" / "外框内嵌内框" 等
+        nested_patterns = [
+            r"大(.{1,3})内套小\1",  # 大X内套小X
+            r"外(.{1,3})内嵌内\1",  # 外X内嵌内X
+            r"(.{1,3})内嵌套\1",    # X内嵌套X
+            r"(.{1,3})里套(.{1,3})",  # X里套Y
+        ]
+        
+        has_nested_semantic = False
+        for pattern in nested_patterns:
+            if re.search(pattern, prompt_lower):
+                has_nested_semantic = True
+                break
+        
+        if not has_nested_semantic:
+            return
+        
+        # 查找 border/frame 角色的 motif 作为外层
+        outer_frames = [m for m in plan.motifs if m.role in {"border", "frame"} and m.motif_type == "frame"]
+        if not outer_frames:
+            return
+        
+        # 查找中心区域的 motif 作为内层（应该是边框）
+        for motif in plan.motifs:
+            if motif.role not in {"center"}:
+                continue
+            if motif.motif_type in {"frame", "panel"}:
+                # 检查是否同中心（嵌套关系）
+                is_nested = False
+                for outer in outer_frames:
+                    outer_center = outer.region.get("center", [20, 20])
+                    motif_center = motif.region.get("center", [20, 20])
+                    try:
+                        dist = abs(int(outer_center[0]) - int(motif_center[0])) + abs(int(outer_center[1]) - int(motif_center[1]))
+                        if dist <= 3:  # 同中心或接近
+                            is_nested = True
+                            break
+                    except Exception:
+                        continue
+                
+                if is_nested:
+                    # 修复：确保内层有边框
+                    if motif.motif_type == "panel":
+                        motif.motif_type = "frame"
+                        logger.info(
+                            f"[nested_frame_repair] {motif.motif_id}: type panel -> frame "
+                            f"(nested frame semantic detected)"
+                        )
+                    
+                    # 确保有 border_thickness
+                    if not motif.params.get("border_thickness"):
+                        motif.params["border_thickness"] = 1
+                        logger.info(
+                            f"[nested_frame_repair] {motif.motif_id}: added border_thickness=1"
+                        )
+                    
+                    # 确保 region 有 shape
+                    if not motif.region.get("shape"):
+                        motif.region["shape"] = "rectangle"
 
     def _normalize_params(self, effect: str, params: Dict[str, Any]) -> Dict[str, Any]:
         params = dict(params or {})
@@ -1511,6 +2722,8 @@ class PatternPlanEngine:
 
     def _region_to_placement(self, motif: PatternMotif) -> Dict[str, Any]:
         placement = dict(motif.region)
+        # 保留 motif_type 供下游边框决策使用
+        placement["motif_type"] = motif.motif_type
         if motif.role in {"allover", "background", "ground"}:
             return {"type": "full"}
         if placement.get("type") == "full":
@@ -1533,13 +2746,92 @@ class PatternPlanEngine:
                     repeat["clip_to_parent"] = True
                 return repeat
             return {"type": "full"}
+        # difference 类型：外区减去内区 → 转换为完整布局 + 内圈排除
+        if placement.get("type") == "difference":
+            outer = placement.get("outer", {})
+            inner = placement.get("inner", {})
+            outer_shape = str(placement.get("shape", "rectangle")).lower()
+            outer_center = outer.get("center", placement.get("center", [20, 20]))
+            # 从 outer bounds 推导 size
+            ob = outer.get("bounds", {})
+            if ob:
+                try:
+                    bw = abs(int(ob.get("x2", 39)) - int(ob.get("x1", 0)))
+                    bh = abs(int(ob.get("y2", 39)) - int(ob.get("y1", 0)))
+                    outer_size = max(bw, bh) // 2 + 1  # +1 保证覆盖边界像素
+                except Exception:
+                    outer_size = 20
+            else:
+                outer_size = int(outer.get("size", placement.get("size", 20)))
+            inner_center = inner.get("center", outer_center)
+            inner_size = int(inner.get("size", 10))
+            inner_shape = str(inner.get("shape", outer_shape)).lower()
+            # 外圈必须大于内圈至少4（每侧≥2 cells），否则环形区域不可见
+            if outer_size <= inner_size + 3:
+                _orig_outer = outer_size
+                outer_size = inner_size + 4
+                logger.warning(
+                    f"  [{motif.motif_id}] difference outer_size({_orig_outer}) 与 inner_size({inner_size}) "
+                    f"间距不足，已调整为 outer_size={outer_size}"
+                )
+            placement["type"] = "full" if outer_size >= 19 else "local"
+            placement["center"] = outer_center
+            placement["size"] = outer_size
+            placement["shape"] = outer_shape
+            placement["mask_shape"] = outer_shape
+            placement["inner_exclude"] = {
+                "center": inner_center,
+                "size": inner_size,
+                "shape": inner_shape,
+            }
+            logger.info(
+                f"  [{motif.motif_id}] difference → outer({outer_shape}, size={outer_size}) "
+                f"- inner({inner_shape}, size={inner_size})"
+            )
         # ring 类型：转换为外圈形状 + 内圈排除
         if placement.get("type") == "ring":
             outer_shape = str(placement.get("shape", "circle")).lower()
             outer_center = placement.get("outer_center", placement.get("center", [20, 20]))
-            outer_size = placement.get("outer_size", 38)
             inner_center = placement.get("inner_center", [20, 20])
-            inner_size = placement.get("inner_size", 16)
+
+            # inner_size: 支持 inner_size / inner_radius / inner_diameter 三种字段名
+            inner_size = placement.get("inner_size")
+            if inner_size is None:
+                ir = placement.get("inner_radius")
+                if ir is not None:
+                    inner_size = int(ir) * 2
+                else:
+                    inner_size = placement.get("inner_diameter", 16)
+            inner_size = int(inner_size)
+
+            # outer_size: 支持 outer_size / outer_radius / outer_border 推导
+            outer_size = placement.get("outer_size")
+            if outer_size is None:
+                # outer_radius → 直径（与 inner_radius 对称）
+                outer_radius = placement.get("outer_radius")
+                if outer_radius is not None:
+                    outer_size = int(outer_radius) * 2
+                else:
+                    ob = placement.get("outer_border")
+                    if ob is not None:
+                        outer_size = inner_size + int(ob) * 2
+                    else:
+                        # 回退到 region 的 size 字段（即 LLM 指定的整体大小）
+                        outer_size = placement.get("size", 20)
+            outer_size = int(outer_size)
+
+            # 外圈必须大于内圈至少4（每侧≥2 cells），否则环形区域不可见
+            # _ring_fixed 也可能已由 _preprocess_ring_motifs 设为 True
+            _ring_fixed = bool(placement.get("_ring_fixed"))
+            if outer_size <= inner_size + 3:
+                _orig_outer = outer_size
+                outer_size = inner_size + 4
+                _ring_fixed = True
+                logger.warning(
+                    f"  [{motif.motif_id}] ring outer_size({_orig_outer}) 与 inner_size({inner_size}) "
+                    f"间距不足，已调整为 outer_size={outer_size}"
+                )
+
             placement["center"] = outer_center
             placement["size"] = outer_size
             placement["shape"] = outer_shape
@@ -1549,16 +2841,52 @@ class PatternPlanEngine:
                 "size": inner_size,
                 "shape": outer_shape,
             }
+            if _ring_fixed:
+                placement["_ring_fixed"] = True
         placement.setdefault("center", [20, 20])
         placement.setdefault("size", 16)
         placement.setdefault("shape", self._motif_to_visual_shape(motif.motif_type))
+        # 修正：从 top_left/bottom_right 或 bounds 重新计算 size
+        tl = placement.get("top_left")
+        br = placement.get("bottom_right")
+        center = placement.get("center")
+        bounds = motif.region.get("bounds")
+        if bounds and not tl:
+            # bounds 格式: {x1, y1, x2, y2}
+            try:
+                tl = [int(bounds.get("x1", 0)), int(bounds.get("y1", 0))]
+                br = [int(bounds.get("x2", 39)), int(bounds.get("y2", 39))]
+            except Exception:
+                tl = br = None
+        if tl and br and center:
+            try:
+                w = abs(int(br[0]) - int(tl[0]))
+                h = abs(int(br[1]) - int(tl[1]))
+                correct_size = (max(w, h) + 1) // 2
+                old_size = int(placement.get("size", 16))
+                if correct_size != old_size:
+                    logger.warning(
+                        f"  [{motif.motif_id}] size={old_size} 与坐标范围 "
+                        f"推导的 size={correct_size} 不一致，已修正"
+                    )
+                    placement["size"] = correct_size
+            except Exception:
+                pass
         if motif.parent_id:
             placement["parent_id"] = motif.parent_id
             placement["clip_to_parent"] = True
+        # 形状标准化：确保 "frame"/"border" 等语义词转为 "rectangle"
+        _FRAME_TO_RECT = {"frame", "border", "rect", "square", "box"}
+        cur_shape = str(placement.get("shape", "")).lower()
+        cur_mask = str(placement.get("mask_shape", "")).lower()
+        if cur_shape in _FRAME_TO_RECT:
+            placement["shape"] = "rectangle"
+        if cur_mask in _FRAME_TO_RECT:
+            placement["mask_shape"] = "rectangle"
+        # motif_type == "frame" 的边框特殊处理
         if motif.motif_type == "frame":
-            # 优先使用 region 中用户/LLM显式指定的形状（如 circle, diamond）
             region_shape = str(motif.region.get("shape", "")).lower()
-            if region_shape and region_shape not in {"frame", "border", "rectangle", "rect", "square", "box", ""}:
+            if region_shape and region_shape not in _FRAME_TO_RECT | {"rectangle", ""}:
                 placement["shape"] = region_shape
                 placement["mask_shape"] = region_shape
             else:
@@ -1593,12 +2921,14 @@ class PatternPlanEngine:
         key = str(raw or "").lower().strip()
         mapping = {"main": "center", "frame": "border", "fill": "center", "inner": "center", "accent": "center", "decoration": "center", "repeat": "allover", "background": "allover", "bg": "allover"}
         key = mapping.get(key, key)
-        return key if key in {"center", "ground", "border", "side_band", "allover"} else "center"
+        return key if key in {"center", "ground", "border", "side_band", "allover", "corner", "transition", "surround"} else "center"
 
     def _normalize_role(self, raw: str) -> str:
         key = str(raw or "").lower().strip()
         mapping = {
             "frame": "border",
+            "frame_outer": "border",
+            "frame_inner": "border",
             "outline": "border",
             "outer": "border",
             "fill": "center",
@@ -1611,7 +2941,15 @@ class PatternPlanEngine:
             "background": "allover",
             "bg": "allover",
         }
-        return mapping.get(key, key)
+        if key in mapping:
+            return mapping[key]
+        # LLM 常将方位词用作 role（如 "left"/"right"/"inner_left"）
+        # 含 inner/inside 前缀 → center；纯方位词 → border
+        if any(k in key for k in ["inner", "inside", "fill"]):
+            return "center"
+        if key in {"left", "right", "top", "bottom"}:
+            return "border"
+        return key
 
     def _infer_missing_parent_links(self, plan: PatternPlan) -> None:
         """Recover common layer relations when the LLM omits parent_id.
@@ -1635,7 +2973,7 @@ class PatternPlanEngine:
         for motif in plan.motifs:
             if motif.parent_id is not None:
                 continue
-            if motif.role in {"side_band", "allover"}:
+            if motif.role in {"side_band", "allover", "corner", "transition", "surround"}:
                 continue
             if motif in containers:
                 continue
@@ -1664,6 +3002,82 @@ class PatternPlanEngine:
             if best is not None:
                 motif.parent_id = best.motif_id
                 motif.region.setdefault("shape", best.motif_type)
+
+    def _validate_parent_assignments(self, plan: PatternPlan) -> None:
+        """验证已有 parent_id 的空间合理性，修正 LLM 的错误父子指派。
+
+        LLM 可能基于名称匹配（如 'inside_right' -> 'wave_inside_left'）而非空间包含关系
+        来设置 parent_id。本方法检测并修正此类错误：如果另一个容器与 motif 的中心距离
+        明显更近（不足当前父节点距离的一半），则重新指派父节点。
+        """
+        texture_effects = {"wave_tuck", "lace", "relief", "honeycomb", "seed", "rib", "links", "mesh"}
+        containers = [
+            m for m in plan.motifs
+            if (
+                m.role in {"border", "frame"}
+                or m.motif_type in {"diamond", "circle", "triangle", "hexagon", "polygon", "heart", "star", "rectangle"}
+            )
+            and m.effect not in texture_effects
+            and m.role not in {"center", "allover", "ground"}
+        ]
+        if len(containers) < 2:
+            return
+
+        for motif in plan.motifs:
+            if not motif.parent_id:
+                continue
+            if motif.role in {"allover", "background", "ground", "side_band"}:
+                continue
+
+            center = motif.region.get("center", [20, 20])
+            try:
+                cr, cc = int(center[0]), int(center[1])
+            except (TypeError, ValueError):
+                continue
+
+            # 计算当前父节点的距离
+            current_parent = None
+            current_dist = 999
+            for c in containers:
+                if c.motif_id == motif.parent_id:
+                    try:
+                        pc = c.region.get("center", [20, 20])
+                        current_dist = abs(cr - int(pc[0])) + abs(cc - int(pc[1]))
+                    except (TypeError, ValueError):
+                        pass
+                    current_parent = c
+                    break
+
+            if current_parent is None:
+                continue
+
+            # 寻找更近的容器
+            best_alternative = None
+            best_dist = current_dist
+            for c in containers:
+                if c.motif_id == motif.parent_id:
+                    continue
+                try:
+                    pc = c.region.get("center", [20, 20])
+                    dist = abs(cr - int(pc[0])) + abs(cc - int(pc[1]))
+                except (TypeError, ValueError):
+                    continue
+                p_size = int(c.region.get("size", 0))
+                m_size = int(motif.region.get("size", 0))
+                if p_size < m_size:
+                    continue  # 容器必须能包含 motif
+                if dist < best_dist:
+                    best_dist = dist
+                    best_alternative = c
+
+            # 如果更近的容器距离不足当前父节点距离的一半，重新指派
+            if best_alternative is not None and best_dist < current_dist * 0.5:
+                logger.warning(
+                    f"  [{motif.motif_id}] parent reassigned: "
+                    f"{motif.parent_id} (dist={current_dist}) -> "
+                    f"{best_alternative.motif_id} (dist={best_dist})"
+                )
+                motif.parent_id = best_alternative.motif_id
 
     def _next_id(self, plan: PatternPlan, prefix: Any) -> str:
         stem = re.sub(r"[^a-zA-Z0-9_]+", "_", str(prefix or "motif")).strip("_") or "motif"
